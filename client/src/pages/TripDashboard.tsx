@@ -4,7 +4,8 @@ import { format } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowLeft, MapPin, Calendar, Edit3, Briefcase, 
-  Sparkles, ShieldAlert, Globe, ChevronRight, CheckCircle2 
+  Sparkles, ShieldAlert, Globe, ChevronRight, CheckCircle2,
+  AlertTriangle, Shield
 } from "lucide-react";
 import { useTrip } from "@/hooks/use-trips";
 import { useCulturalTips, useSafetyAdvice, useGeneratePackingList } from "@/hooks/use-ai";
@@ -156,6 +157,27 @@ export default function TripDashboard() {
                       Open Checklist
                     </Button>
                   </Link>
+                </div>
+
+                {/* New Safety Section */}
+                <div className="bg-gradient-to-br from-destructive/5 to-transparent rounded-3xl p-8 border border-destructive/10">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 bg-destructive/10 text-destructive rounded-2xl">
+                      <ShieldAlert className="h-6 w-6" />
+                    </div>
+                    <h2 className="text-2xl font-bold">Safety & Crime Data</h2>
+                  </div>
+                  <p className="text-muted-foreground mb-6">Get real-time AI insights on areas to avoid and common scams based on local safety data.</p>
+                  <Button 
+                    onClick={() => {
+                      setActiveTab("ai");
+                      handleGetSafety();
+                    }}
+                    variant="outline"
+                    className="rounded-xl border-destructive/20 text-destructive hover:bg-destructive/5"
+                  >
+                    View Safety Report
+                  </Button>
                 </div>
               </div>
 

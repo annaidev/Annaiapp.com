@@ -168,8 +168,8 @@ export async function registerRoutes(
       const response = await openai.chat.completions.create({
         model: "gpt-5.1",
         messages: [
-          { role: "system", content: "You are a travel safety expert. Provide concise advice on areas to avoid, common scams, and general safety based on recent data. Format with markdown." },
-          { role: "user", content: `What are the safety concerns, areas to avoid, and common scams in ${destination}?` }
+          { role: "system", content: "You are a travel safety expert. Provide concise advice on areas to avoid, common scams, and general safety based on recent crime data. Format with clear markdown headings and bullet points." },
+          { role: "user", content: `What are the safety concerns, high-crime areas to avoid, and common scams in ${destination}?` }
         ],
       });
       
