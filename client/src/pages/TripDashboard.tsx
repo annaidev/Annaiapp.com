@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowLeft, MapPin, Calendar, Edit3, Briefcase, 
   Sparkles, ShieldAlert, Globe, ChevronRight, CheckCircle2,
-  AlertTriangle, Shield
+  AlertTriangle, Shield, Plus, Home
 } from "lucide-react";
 import { useTrip } from "@/hooks/use-trips";
 import { useCulturalTips, useSafetyAdvice, useGeneratePackingList } from "@/hooks/use-ai";
@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { TripForm } from "@/components/TripForm";
 
 const EXTERNAL_LINKS = [
-  { name: "Airbnb", icon: "🏠", color: "bg-[#FF5A5F]/10 text-[#FF5A5F]", getUrl: (dest: string) => `https://www.airbnb.com/s/${encodeURIComponent(dest)}` },
+  { name: "Airbnb", icon: <Home className="h-5 w-5" />, color: "bg-[#FF5A5F]/10 text-[#FF5A5F]", getUrl: (dest: string) => `https://www.airbnb.com/s/${encodeURIComponent(dest)}/homes` },
   { name: "Flights", icon: "✈️", color: "bg-blue-500/10 text-blue-600", getUrl: (dest: string) => `https://www.google.com/travel/flights?q=${encodeURIComponent(dest)}` },
   { name: "Hotels", icon: "🏨", color: "bg-indigo-500/10 text-indigo-600", getUrl: (dest: string) => `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest)}` },
   { name: "Uber", icon: "🚗", color: "bg-black/10 text-black dark:bg-white/10 dark:text-white", getUrl: () => `https://m.uber.com/looking` },
