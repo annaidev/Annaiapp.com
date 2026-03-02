@@ -33,6 +33,38 @@ export async function registerRoutes(
     try {
       const input = api.trips.create.input.parse(req.body);
       const trip = await storage.createTrip(input);
+      
+      // Prefill packing list using AI
+      try {
+        const prompt = `Generate a concise essential packing list for a trip to ${trip.destination}. 
+        Include location-specific essentials like universal adapters (if international/overseas from US/EU), 
+        jackets/clothing based on typical weather, and must-have travel documents. 
+        Return ONLY a JSON object with a single key 'items' containing an array of strings.`;
+        
+        const aiResponse = await openai.chat.completions.create({
+          model: "gpt-5.1",
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+        });
+        
+        const content = aiResponse.choices[0]?.message?.content;
+        if (content) {
+          const { items } = JSON.parse(content);
+          if (Array.isArray(items)) {
+            for (const item of items) {
+              await storage.createPackingList({
+                tripId: trip.id,
+                item,
+                isPacked: false
+              });
+            }
+          }
+        }
+      } catch (aiError) {
+        console.error("Failed to prefill packing list:", aiError);
+        // We don't fail the trip creation if AI prefill fails
+      }
+
       res.status(201).json(trip);
     } catch (err) {
       if (err instanceof z.ZodError) {
