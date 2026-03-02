@@ -57,7 +57,7 @@ export default function TripDashboard() {
   };
 
   const handleGetSafety = () => {
-    safetyMutation.mutate(trip.destination, {
+    safetyMutation.mutate({ destination: trip.destination, citizenship: trip.citizenship || undefined }, {
       onSuccess: (data) => setAiContent({ type: 'safety', content: data.advice })
     });
   };

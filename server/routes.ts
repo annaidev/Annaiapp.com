@@ -195,13 +195,13 @@ export async function registerRoutes(
 
   app.post(api.ai.safetyAdvice.path, async (req, res) => {
     try {
-      const { destination } = api.ai.safetyAdvice.input.parse(req.body);
+      const { destination, citizenship } = api.ai.safetyAdvice.input.parse(req.body);
       
       const response = await openai.chat.completions.create({
         model: "gpt-5.1",
         messages: [
-          { role: "system", content: "You are a travel safety expert. Provide concise advice on areas to avoid, common scams, and general safety based on recent crime data. Format with clear markdown headings and bullet points." },
-          { role: "user", content: `What are the safety concerns, high-crime areas to avoid, and common scams in ${destination}?` }
+          { role: "system", content: "You are a travel safety and diplomatic expert. Provide concise advice on areas to avoid, common scams, and general safety. ALSO, if provided with a citizenship, find and include the location and contact information for the nearest embassy or consulate of that country in the destination. Format with clear markdown headings." },
+          { role: "user", content: `What are the safety concerns and embassy information for a ${citizenship || "traveler"} visiting ${destination}?` }
         ],
       });
       

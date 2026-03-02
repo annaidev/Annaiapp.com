@@ -126,6 +126,7 @@ export const api = {
       path: '/api/ai/safety-advice' as const,
       input: z.object({
         destination: z.string(),
+        citizenship: z.string().optional(),
       }),
       responses: {
         200: z.object({

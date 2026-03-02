@@ -10,6 +10,7 @@ export const trips = pgTable("trips", {
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   notes: text("notes"),
+  citizenship: text("citizenship"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

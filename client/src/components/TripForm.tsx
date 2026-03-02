@@ -23,6 +23,7 @@ export function TripForm({ open, onOpenChange, trip }: TripFormProps) {
     startDate: trip?.startDate ? new Date(trip.startDate).toISOString().split("T")[0] : "",
     endDate: trip?.endDate ? new Date(trip.endDate).toISOString().split("T")[0] : "",
     notes: trip?.notes || "",
+    citizenship: trip?.citizenship || "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -33,6 +34,7 @@ export function TripForm({ open, onOpenChange, trip }: TripFormProps) {
       startDate: formData.startDate ? new Date(formData.startDate) : undefined,
       endDate: formData.endDate ? new Date(formData.endDate) : undefined,
       notes: formData.notes,
+      citizenship: formData.citizenship,
     };
 
     if (isEdit && trip) {
@@ -91,6 +93,17 @@ export function TripForm({ open, onOpenChange, trip }: TripFormProps) {
                 className="rounded-xl h-12 bg-muted/50 border-transparent focus:border-primary focus:bg-background transition-colors"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="citizenship" className="text-foreground">Citizenship (for Embassy info)</Label>
+            <Input
+              id="citizenship"
+              placeholder="e.g. United States, United Kingdom"
+              value={formData.citizenship}
+              onChange={(e) => setFormData({ ...formData, citizenship: e.target.value })}
+              className="rounded-xl h-12 bg-muted/50 border-transparent focus:border-primary focus:bg-background transition-colors"
+            />
           </div>
 
           <div className="space-y-2">

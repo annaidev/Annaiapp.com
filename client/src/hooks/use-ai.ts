@@ -46,11 +46,11 @@ export function useSafetyAdvice() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (destination: string) => {
+    mutationFn: async ({ destination, citizenship }: { destination: string, citizenship?: string }) => {
       const res = await fetch(api.ai.safetyAdvice.path, {
         method: api.ai.safetyAdvice.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination }),
+        body: JSON.stringify({ destination, citizenship }),
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to generate safety advice");
