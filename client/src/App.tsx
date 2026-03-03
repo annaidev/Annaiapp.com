@@ -7,6 +7,9 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import TripDashboard from "@/pages/TripDashboard";
 import PackingList from "@/pages/PackingList";
+import BudgetTracker from "@/pages/BudgetTracker";
+import DocumentVault from "@/pages/DocumentVault";
+import ItineraryBuilder from "@/pages/ItineraryBuilder";
 
 function Router() {
   return (
@@ -14,6 +17,9 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/trips/:id" component={TripDashboard} />
       <Route path="/trips/:id/packing-list" component={PackingList} />
+      <Route path="/trips/:id/budget" component={BudgetTracker} />
+      <Route path="/trips/:id/documents" component={DocumentVault} />
+      <Route path="/trips/:id/itinerary" component={ItineraryBuilder} />
       <Route component={NotFound} />
     </Switch>
   );

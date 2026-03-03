@@ -22,9 +22,43 @@ export const packingLists = pgTable("packing_lists", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const budgetItems = pgTable("budget_items", {
+  id: serial("id").primaryKey(),
+  tripId: integer("trip_id").notNull().references(() => trips.id, { onDelete: "cascade" }),
+  category: text("category").notNull(),
+  description: text("description").notNull(),
+  amount: integer("amount").notNull(),
+  currency: text("currency").default("USD"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const travelDocuments = pgTable("travel_documents", {
+  id: serial("id").primaryKey(),
+  tripId: integer("trip_id").notNull().references(() => trips.id, { onDelete: "cascade" }),
+  docType: text("doc_type").notNull(),
+  label: text("label").notNull(),
+  referenceNumber: text("reference_number"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const itineraryItems = pgTable("itinerary_items", {
+  id: serial("id").primaryKey(),
+  tripId: integer("trip_id").notNull().references(() => trips.id, { onDelete: "cascade" }),
+  dayNumber: integer("day_number").notNull(),
+  timeSlot: text("time_slot"),
+  title: text("title").notNull(),
+  description: text("description"),
+  category: text("category").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // === RELATIONS ===
 export const tripsRelations = relations(trips, ({ many }) => ({
   packingLists: many(packingLists),
+  budgetItems: many(budgetItems),
+  travelDocuments: many(travelDocuments),
+  itineraryItems: many(itineraryItems),
 }));
 
 export const packingListsRelations = relations(packingLists, ({ one }) => ({
@@ -34,9 +68,33 @@ export const packingListsRelations = relations(packingLists, ({ one }) => ({
   }),
 }));
 
+export const budgetItemsRelations = relations(budgetItems, ({ one }) => ({
+  trip: one(trips, {
+    fields: [budgetItems.tripId],
+    references: [trips.id],
+  }),
+}));
+
+export const travelDocumentsRelations = relations(travelDocuments, ({ one }) => ({
+  trip: one(trips, {
+    fields: [travelDocuments.tripId],
+    references: [trips.id],
+  }),
+}));
+
+export const itineraryItemsRelations = relations(itineraryItems, ({ one }) => ({
+  trip: one(trips, {
+    fields: [itineraryItems.tripId],
+    references: [trips.id],
+  }),
+}));
+
 // === BASE SCHEMAS ===
 export const insertTripSchema = createInsertSchema(trips).omit({ id: true, createdAt: true });
 export const insertPackingListSchema = createInsertSchema(packingLists).omit({ id: true, createdAt: true });
+export const insertBudgetItemSchema = createInsertSchema(budgetItems).omit({ id: true, createdAt: true });
+export const insertTravelDocumentSchema = createInsertSchema(travelDocuments).omit({ id: true, createdAt: true });
+export const insertItineraryItemSchema = createInsertSchema(itineraryItems).omit({ id: true, createdAt: true });
 
 // === EXPLICIT API CONTRACT TYPES ===
 export type Trip = typeof trips.$inferSelect;
@@ -52,3 +110,18 @@ export type CreatePackingListRequest = InsertPackingList;
 export type UpdatePackingListRequest = Partial<InsertPackingList>;
 export type PackingListResponse = PackingList;
 export type PackingListsResponse = PackingList[];
+
+export type BudgetItem = typeof budgetItems.$inferSelect;
+export type InsertBudgetItem = z.infer<typeof insertBudgetItemSchema>;
+export type BudgetItemResponse = BudgetItem;
+export type BudgetItemsResponse = BudgetItem[];
+
+export type TravelDocument = typeof travelDocuments.$inferSelect;
+export type InsertTravelDocument = z.infer<typeof insertTravelDocumentSchema>;
+export type TravelDocumentResponse = TravelDocument;
+export type TravelDocumentsResponse = TravelDocument[];
+
+export type ItineraryItem = typeof itineraryItems.$inferSelect;
+export type InsertItineraryItem = z.infer<typeof insertItineraryItemSchema>;
+export type ItineraryItemResponse = ItineraryItem;
+export type ItineraryItemsResponse = ItineraryItem[];

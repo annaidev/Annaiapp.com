@@ -17,18 +17,18 @@ function AnnaiLogo({ className }: { className?: string }) {
 
         <path
           d="M28 2 Q26 8 20 20 Q14 32 6 48 Q4 52 2 55 Q10 42 22 38 Q30 35 35 40 Q40 45 48 52 L52 58 L52 55 L28 2 Z"
-          fill="#2D5A6B"
+          fill="#E05555"
           strokeLinejoin="round"
         />
 
         <path
           d="M28 6 L22 20 Q20 24 18 26 Q24 22 30 26 Q34 28 36 32 L28 6 Z"
-          fill="#89C4E1"
+          fill="#5EC6C6"
         />
 
         <path
           d="M18 26 Q14 32 8 46 Q6 50 5 53 Q12 42 22 39 Q30 36 35 40 Q40 44 46 50 L36 32 Q34 28 30 26 Q24 22 18 26 Z"
-          fill="#5EA55B"
+          fill="#F0A830"
         />
       </g>
 
@@ -38,7 +38,7 @@ function AnnaiLogo({ className }: { className?: string }) {
         fontFamily="'Outfit', 'Plus Jakarta Sans', sans-serif"
         fontSize="42"
         fontWeight="700"
-        fill="#2D5A6B"
+        fill="#E05555"
         letterSpacing="-0.5"
       >
         nnai

@@ -81,3 +81,43 @@ export function useSafetyAdvice() {
     },
   });
 }
+
+export function usePhrases() {
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (destination: string) => {
+      const res = await fetch(api.ai.phrases.path, {
+        method: api.ai.phrases.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destination }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to generate phrases");
+      return api.ai.phrases.responses[200].parse(await res.json());
+    },
+    onError: (error) => {
+      toast({ title: "Failed to get phrases", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
+export function useWeather() {
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ destination, startDate, endDate }: { destination: string, startDate?: string, endDate?: string }) => {
+      const res = await fetch(api.ai.weather.path, {
+        method: api.ai.weather.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destination, startDate, endDate }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to generate weather forecast");
+      return api.ai.weather.responses[200].parse(await res.json());
+    },
+    onError: (error) => {
+      toast({ title: "Failed to get weather", description: error.message, variant: "destructive" });
+    },
+  });
+}

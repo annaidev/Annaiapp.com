@@ -248,6 +248,135 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
     }
   });
 
+  // Budget Items CRUD
+  app.get(api.budgetItems.listByTrip.path, async (req, res) => {
+    const items = await storage.getBudgetItemsByTrip(Number(req.params.tripId));
+    res.json(items);
+  });
+  app.post(api.budgetItems.create.path, async (req, res) => {
+    try {
+      const input = api.budgetItems.create.input.parse(req.body);
+      const item = await storage.createBudgetItem({ ...input, tripId: Number(req.params.tripId) });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      throw err;
+    }
+  });
+  app.put(api.budgetItems.update.path, async (req, res) => {
+    try {
+      const input = api.budgetItems.update.input.parse(req.body);
+      const item = await storage.updateBudgetItem(Number(req.params.id), input);
+      res.json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+  app.delete(api.budgetItems.delete.path, async (req, res) => {
+    await storage.deleteBudgetItem(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Travel Documents CRUD
+  app.get(api.travelDocuments.listByTrip.path, async (req, res) => {
+    const docs = await storage.getTravelDocumentsByTrip(Number(req.params.tripId));
+    res.json(docs);
+  });
+  app.post(api.travelDocuments.create.path, async (req, res) => {
+    try {
+      const input = api.travelDocuments.create.input.parse(req.body);
+      const doc = await storage.createTravelDocument({ ...input, tripId: Number(req.params.tripId) });
+      res.status(201).json(doc);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      throw err;
+    }
+  });
+  app.put(api.travelDocuments.update.path, async (req, res) => {
+    try {
+      const input = api.travelDocuments.update.input.parse(req.body);
+      const doc = await storage.updateTravelDocument(Number(req.params.id), input);
+      res.json(doc);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+  app.delete(api.travelDocuments.delete.path, async (req, res) => {
+    await storage.deleteTravelDocument(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Itinerary Items CRUD
+  app.get(api.itineraryItems.listByTrip.path, async (req, res) => {
+    const items = await storage.getItineraryItemsByTrip(Number(req.params.tripId));
+    res.json(items);
+  });
+  app.post(api.itineraryItems.create.path, async (req, res) => {
+    try {
+      const input = api.itineraryItems.create.input.parse(req.body);
+      const item = await storage.createItineraryItem({ ...input, tripId: Number(req.params.tripId) });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      throw err;
+    }
+  });
+  app.put(api.itineraryItems.update.path, async (req, res) => {
+    try {
+      const input = api.itineraryItems.update.input.parse(req.body);
+      const item = await storage.updateItineraryItem(Number(req.params.id), input);
+      res.json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+  app.delete(api.itineraryItems.delete.path, async (req, res) => {
+    await storage.deleteItineraryItem(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // AI Phrases
+  app.post(api.ai.phrases.path, async (req, res) => {
+    try {
+      const { destination } = api.ai.phrases.input.parse(req.body);
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.1",
+        messages: [
+          { role: "system", content: "You are a language guide for travelers. Provide 10-15 essential phrases travelers need at the destination. For each phrase, include the English meaning, the local language translation, and a phonetic pronunciation guide. Format clearly with markdown. Always respond in English with translations." },
+          { role: "user", content: `Give me essential travel phrases for visiting ${destination}. Include greetings, ordering food, asking for directions, emergencies, and common polite expressions. Respond in English with local language translations and pronunciation.` }
+        ],
+      });
+      const phrases = response.choices[0]?.message?.content || "No phrases available.";
+      res.json({ phrases });
+    } catch (error) {
+      console.error("AI Phrases Error:", error);
+      res.status(500).json({ message: "Failed to generate phrases" });
+    }
+  });
+
+  // AI Weather
+  app.post(api.ai.weather.path, async (req, res) => {
+    try {
+      const { destination, startDate, endDate } = api.ai.weather.input.parse(req.body);
+      const dateRange = startDate && endDate ? `from ${startDate} to ${endDate}` : "for an upcoming trip";
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.1",
+        messages: [
+          { role: "system", content: "You are a travel weather advisor. Provide a helpful weather forecast summary for the destination and time period. Include expected temperatures, rainfall, what to wear, and any weather-related travel tips. Always respond in English. Format with markdown." },
+          { role: "user", content: `What weather should a traveler expect in ${destination} ${dateRange}? Include temperature ranges, precipitation, clothing recommendations, and any weather warnings. Respond in English.` }
+        ],
+      });
+      const forecast = response.choices[0]?.message?.content || "No forecast available.";
+      res.json({ forecast });
+    } catch (error) {
+      console.error("AI Weather Error:", error);
+      res.status(500).json({ message: "Failed to generate weather forecast" });
+    }
+  });
+
   // Call seed function at startup
   seedDatabase().catch(console.error);
 

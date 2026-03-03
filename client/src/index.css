@@ -9,65 +9,65 @@
     --font-sans: 'Plus Jakarta Sans', sans-serif;
     --font-display: 'Outfit', sans-serif;
 
-    --background: 33 35% 93%;
-    --foreground: 195 45% 22%;
+    --background: 40 50% 97%;
+    --foreground: 220 25% 18%;
 
-    --card: 35 30% 96%;
-    --card-foreground: 195 45% 22%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 18%;
 
-    --popover: 35 30% 96%;
-    --popover-foreground: 195 45% 22%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 18%;
 
-    --primary: 195 45% 32%;
-    --primary-foreground: 35 30% 96%;
+    --primary: 4 80% 64%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 120 35% 45%;
-    --secondary-foreground: 35 30% 96%;
+    --secondary: 174 60% 42%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 33 25% 89%;
-    --muted-foreground: 195 20% 40%;
+    --muted: 40 30% 93%;
+    --muted-foreground: 220 10% 45%;
 
-    --accent: 195 55% 55%;
-    --accent-foreground: 35 30% 96%;
+    --accent: 38 95% 60%;
+    --accent-foreground: 220 25% 18%;
 
     --destructive: 0 84% 60%;
-    --destructive-foreground: 35 30% 96%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 33 20% 85%;
-    --input: 33 20% 85%;
-    --ring: 195 45% 32%;
+    --border: 220 15% 90%;
+    --input: 220 15% 90%;
+    --ring: 4 80% 64%;
 
     --radius: 1rem;
   }
 
   .dark {
-    --background: 195 30% 12%;
-    --foreground: 33 30% 90%;
+    --background: 220 20% 10%;
+    --foreground: 40 30% 93%;
 
-    --card: 195 25% 16%;
-    --card-foreground: 33 30% 90%;
+    --card: 220 18% 14%;
+    --card-foreground: 40 30% 93%;
 
-    --popover: 195 25% 16%;
-    --popover-foreground: 33 30% 90%;
+    --popover: 220 18% 14%;
+    --popover-foreground: 40 30% 93%;
 
-    --primary: 195 40% 50%;
-    --primary-foreground: 195 30% 12%;
+    --primary: 4 75% 58%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 120 35% 42%;
-    --secondary-foreground: 33 30% 90%;
+    --secondary: 174 55% 38%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 195 20% 20%;
-    --muted-foreground: 33 15% 65%;
+    --muted: 220 15% 18%;
+    --muted-foreground: 40 15% 60%;
 
-    --accent: 195 50% 50%;
-    --accent-foreground: 33 30% 90%;
+    --accent: 38 90% 55%;
+    --accent-foreground: 220 20% 10%;
 
     --destructive: 0 62% 30%;
-    --destructive-foreground: 33 30% 90%;
+    --destructive-foreground: 40 30% 93%;
 
-    --border: 195 20% 22%;
-    --input: 195 20% 22%;
-    --ring: 195 40% 50%;
+    --border: 220 15% 20%;
+    --input: 220 15% 20%;
+    --ring: 4 75% 58%;
   }
 }
 
@@ -87,7 +87,7 @@
 
 @layer utilities {
   .glass {
-    @apply bg-[hsl(33,30%,93%)]/80 backdrop-blur-lg border border-[hsl(33,20%,85%)]/50 dark:bg-[hsl(195,25%,14%)]/80 dark:border-white/10;
+    @apply bg-white/80 backdrop-blur-lg border border-[hsl(220,15%,90%)]/50 dark:bg-[hsl(220,18%,14%)]/80 dark:border-white/10;
   }
   
   .glass-card {
