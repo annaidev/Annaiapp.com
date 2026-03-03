@@ -9,7 +9,7 @@ export function NavBar() {
           href="/" 
           className="flex items-center hover:opacity-80 transition-opacity"
         >
-          <img src={brandLogo} alt="Annai" className="h-12 object-contain" />
+          <img src={brandLogo} alt="Annai" className="h-12 object-contain mix-blend-multiply dark:mix-blend-screen" />
         </Link>
       </div>
     </header>
