@@ -1,11 +1,11 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
+import { requireAuth } from "./auth";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import OpenAI from "openai";
 
-// Set up OpenAI using Replit AI Integrations credentials
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -15,26 +15,24 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Trips CRUD
-  app.get(api.trips.list.path, async (req, res) => {
-    const trips = await storage.getTrips();
+  app.get(api.trips.list.path, requireAuth, async (req, res) => {
+    const trips = await storage.getTrips(req.user!.id);
     res.json(trips);
   });
 
-  app.get(api.trips.get.path, async (req, res) => {
+  app.get(api.trips.get.path, requireAuth, async (req, res) => {
     const trip = await storage.getTrip(Number(req.params.id));
-    if (!trip) {
+    if (!trip || trip.userId !== req.user!.id) {
       return res.status(404).json({ message: 'Trip not found' });
     }
     res.json(trip);
   });
 
-  app.post(api.trips.create.path, async (req, res) => {
+  app.post(api.trips.create.path, requireAuth, async (req, res) => {
     try {
       const input = api.trips.create.input.parse(req.body);
-      const trip = await storage.createTrip(input);
+      const trip = await storage.createTrip({ ...input, userId: req.user!.id });
       
-      // Prefill packing list using AI
       try {
         const prompt = `Generate a concise essential packing list for a trip to ${trip.destination}. 
         Include location-specific essentials like universal adapters (if international/overseas from US/EU), 
@@ -62,7 +60,6 @@ export async function registerRoutes(
         }
       } catch (aiError) {
         console.error("Failed to prefill packing list:", aiError);
-        // We don't fail the trip creation if AI prefill fails
       }
 
       res.status(201).json(trip);
@@ -77,14 +74,15 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.trips.update.path, async (req, res) => {
+  app.put(api.trips.update.path, requireAuth, async (req, res) => {
     try {
-      const input = api.trips.update.input.parse(req.body);
-      const trip = await storage.updateTrip(Number(req.params.id), input);
-      if (!trip) {
+      const trip = await storage.getTrip(Number(req.params.id));
+      if (!trip || trip.userId !== req.user!.id) {
         return res.status(404).json({ message: 'Trip not found' });
       }
-      res.json(trip);
+      const input = api.trips.update.input.parse(req.body);
+      const updated = await storage.updateTrip(Number(req.params.id), input);
+      res.json(updated);
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({
@@ -96,18 +94,21 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.trips.delete.path, async (req, res) => {
+  app.delete(api.trips.delete.path, requireAuth, async (req, res) => {
+    const trip = await storage.getTrip(Number(req.params.id));
+    if (!trip || trip.userId !== req.user!.id) {
+      return res.status(404).json({ message: 'Trip not found' });
+    }
     await storage.deleteTrip(Number(req.params.id));
     res.status(204).send();
   });
 
-  // Packing Lists CRUD
-  app.get(api.packingLists.listByTrip.path, async (req, res) => {
+  app.get(api.packingLists.listByTrip.path, requireAuth, async (req, res) => {
     const items = await storage.getPackingListsByTrip(Number(req.params.tripId));
     res.json(items);
   });
 
-  app.post(api.packingLists.create.path, async (req, res) => {
+  app.post(api.packingLists.create.path, requireAuth, async (req, res) => {
     try {
       const input = api.packingLists.create.input.parse(req.body);
       const item = await storage.createPackingList({
@@ -126,7 +127,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.packingLists.update.path, async (req, res) => {
+  app.put(api.packingLists.update.path, requireAuth, async (req, res) => {
     try {
       const input = api.packingLists.update.input.parse(req.body);
       const item = await storage.updatePackingList(Number(req.params.id), input);
@@ -145,13 +146,12 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.packingLists.delete.path, async (req, res) => {
+  app.delete(api.packingLists.delete.path, requireAuth, async (req, res) => {
     await storage.deletePackingList(Number(req.params.id));
     res.status(204).send();
   });
 
-  // AI Endpoints
-  app.post(api.ai.generatePackingList.path, async (req, res) => {
+  app.post(api.ai.generatePackingList.path, requireAuth, async (req, res) => {
     try {
       const { destination, days } = api.ai.generatePackingList.input.parse(req.body);
       
@@ -173,7 +173,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.ai.culturalTips.path, async (req, res) => {
+  app.post(api.ai.culturalTips.path, requireAuth, async (req, res) => {
     try {
       const { destination } = api.ai.culturalTips.input.parse(req.body);
       
@@ -193,7 +193,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.ai.safetyAdvice.path, async (req, res) => {
+  app.post(api.ai.safetyAdvice.path, requireAuth, async (req, res) => {
     try {
       const { destination, citizenship } = api.ai.safetyAdvice.input.parse(req.body);
       
@@ -213,7 +213,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.ai.safetyMap.path, async (req, res) => {
+  app.post(api.ai.safetyMap.path, requireAuth, async (req, res) => {
     try {
       const { destination } = api.ai.safetyMap.input.parse(req.body);
 
@@ -248,12 +248,11 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
     }
   });
 
-  // Budget Items CRUD
-  app.get(api.budgetItems.listByTrip.path, async (req, res) => {
+  app.get(api.budgetItems.listByTrip.path, requireAuth, async (req, res) => {
     const items = await storage.getBudgetItemsByTrip(Number(req.params.tripId));
     res.json(items);
   });
-  app.post(api.budgetItems.create.path, async (req, res) => {
+  app.post(api.budgetItems.create.path, requireAuth, async (req, res) => {
     try {
       const input = api.budgetItems.create.input.parse(req.body);
       const item = await storage.createBudgetItem({ ...input, tripId: Number(req.params.tripId) });
@@ -263,7 +262,7 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
       throw err;
     }
   });
-  app.put(api.budgetItems.update.path, async (req, res) => {
+  app.put(api.budgetItems.update.path, requireAuth, async (req, res) => {
     try {
       const input = api.budgetItems.update.input.parse(req.body);
       const item = await storage.updateBudgetItem(Number(req.params.id), input);
@@ -273,17 +272,16 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
       throw err;
     }
   });
-  app.delete(api.budgetItems.delete.path, async (req, res) => {
+  app.delete(api.budgetItems.delete.path, requireAuth, async (req, res) => {
     await storage.deleteBudgetItem(Number(req.params.id));
     res.status(204).send();
   });
 
-  // Travel Documents CRUD
-  app.get(api.travelDocuments.listByTrip.path, async (req, res) => {
+  app.get(api.travelDocuments.listByTrip.path, requireAuth, async (req, res) => {
     const docs = await storage.getTravelDocumentsByTrip(Number(req.params.tripId));
     res.json(docs);
   });
-  app.post(api.travelDocuments.create.path, async (req, res) => {
+  app.post(api.travelDocuments.create.path, requireAuth, async (req, res) => {
     try {
       const input = api.travelDocuments.create.input.parse(req.body);
       const doc = await storage.createTravelDocument({ ...input, tripId: Number(req.params.tripId) });
@@ -293,7 +291,7 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
       throw err;
     }
   });
-  app.put(api.travelDocuments.update.path, async (req, res) => {
+  app.put(api.travelDocuments.update.path, requireAuth, async (req, res) => {
     try {
       const input = api.travelDocuments.update.input.parse(req.body);
       const doc = await storage.updateTravelDocument(Number(req.params.id), input);
@@ -303,17 +301,16 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
       throw err;
     }
   });
-  app.delete(api.travelDocuments.delete.path, async (req, res) => {
+  app.delete(api.travelDocuments.delete.path, requireAuth, async (req, res) => {
     await storage.deleteTravelDocument(Number(req.params.id));
     res.status(204).send();
   });
 
-  // Itinerary Items CRUD
-  app.get(api.itineraryItems.listByTrip.path, async (req, res) => {
+  app.get(api.itineraryItems.listByTrip.path, requireAuth, async (req, res) => {
     const items = await storage.getItineraryItemsByTrip(Number(req.params.tripId));
     res.json(items);
   });
-  app.post(api.itineraryItems.create.path, async (req, res) => {
+  app.post(api.itineraryItems.create.path, requireAuth, async (req, res) => {
     try {
       const input = api.itineraryItems.create.input.parse(req.body);
       const item = await storage.createItineraryItem({ ...input, tripId: Number(req.params.tripId) });
@@ -323,7 +320,7 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
       throw err;
     }
   });
-  app.put(api.itineraryItems.update.path, async (req, res) => {
+  app.put(api.itineraryItems.update.path, requireAuth, async (req, res) => {
     try {
       const input = api.itineraryItems.update.input.parse(req.body);
       const item = await storage.updateItineraryItem(Number(req.params.id), input);
@@ -333,13 +330,12 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
       throw err;
     }
   });
-  app.delete(api.itineraryItems.delete.path, async (req, res) => {
+  app.delete(api.itineraryItems.delete.path, requireAuth, async (req, res) => {
     await storage.deleteItineraryItem(Number(req.params.id));
     res.status(204).send();
   });
 
-  // AI Phrases
-  app.post(api.ai.phrases.path, async (req, res) => {
+  app.post(api.ai.phrases.path, requireAuth, async (req, res) => {
     try {
       const { destination } = api.ai.phrases.input.parse(req.body);
       const response = await openai.chat.completions.create({
@@ -357,8 +353,7 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
     }
   });
 
-  // AI Weather
-  app.post(api.ai.weather.path, async (req, res) => {
+  app.post(api.ai.weather.path, requireAuth, async (req, res) => {
     try {
       const { destination, startDate, endDate } = api.ai.weather.input.parse(req.body);
       const dateRange = startDate && endDate ? `from ${startDate} to ${endDate}` : "for an upcoming trip";
@@ -377,31 +372,5 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
     }
   });
 
-  // Call seed function at startup
-  seedDatabase().catch(console.error);
-
   return httpServer;
-}
-
-async function seedDatabase() {
-  const existingTrips = await storage.getTrips();
-  if (existingTrips.length === 0) {
-    const trip1 = await storage.createTrip({ 
-      destination: "Kyoto, Japan", 
-      startDate: new Date(new Date().getTime() + 14 * 24 * 60 * 60 * 1000), // 14 days from now
-      endDate: new Date(new Date().getTime() + 21 * 24 * 60 * 60 * 1000), // 21 days from now
-      notes: "Staying near Gion. Plan to visit bamboo forest." 
-    });
-    
-    await storage.createPackingList({ tripId: trip1.id, item: "Passport", isPacked: true });
-    await storage.createPackingList({ tripId: trip1.id, item: "Universal Adapter", isPacked: false });
-    await storage.createPackingList({ tripId: trip1.id, item: "Walking Shoes", isPacked: false });
-    
-    await storage.createTrip({ 
-      destination: "Rome, Italy", 
-      startDate: new Date(new Date().getTime() + 60 * 24 * 60 * 60 * 1000), 
-      endDate: new Date(new Date().getTime() + 67 * 24 * 60 * 60 * 1000),
-      notes: "Book Colosseum tickets in advance!" 
-    });
-  }
 }

@@ -4,8 +4,16 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // === TABLE DEFINITIONS ===
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const trips = pgTable("trips", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),
   destination: text("destination").notNull(),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
@@ -54,7 +62,15 @@ export const itineraryItems = pgTable("itinerary_items", {
 });
 
 // === RELATIONS ===
-export const tripsRelations = relations(trips, ({ many }) => ({
+export const usersRelations = relations(users, ({ many }) => ({
+  trips: many(trips),
+}));
+
+export const tripsRelations = relations(trips, ({ one, many }) => ({
+  user: one(users, {
+    fields: [trips.userId],
+    references: [users.id],
+  }),
   packingLists: many(packingLists),
   budgetItems: many(budgetItems),
   travelDocuments: many(travelDocuments),
@@ -90,6 +106,7 @@ export const itineraryItemsRelations = relations(itineraryItems, ({ one }) => ({
 }));
 
 // === BASE SCHEMAS ===
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertTripSchema = createInsertSchema(trips).omit({ id: true, createdAt: true });
 export const insertPackingListSchema = createInsertSchema(packingLists).omit({ id: true, createdAt: true });
 export const insertBudgetItemSchema = createInsertSchema(budgetItems).omit({ id: true, createdAt: true });
@@ -97,6 +114,9 @@ export const insertTravelDocumentSchema = createInsertSchema(travelDocuments).om
 export const insertItineraryItemSchema = createInsertSchema(itineraryItems).omit({ id: true, createdAt: true });
 
 // === EXPLICIT API CONTRACT TYPES ===
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
 export type Trip = typeof trips.$inferSelect;
 export type InsertTrip = z.infer<typeof insertTripSchema>;
 export type CreateTripRequest = InsertTrip;

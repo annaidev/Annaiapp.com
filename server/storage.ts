@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { 
-  trips, packingLists, budgetItems, travelDocuments, itineraryItems,
+  users, trips, packingLists, budgetItems, travelDocuments, itineraryItems,
+  type User, type InsertUser,
   type CreateTripRequest, type UpdateTripRequest, type TripResponse, type TripsListResponse,
   type CreatePackingListRequest, type UpdatePackingListRequest, type PackingListResponse, type PackingListsResponse,
   type InsertBudgetItem, type BudgetItemResponse, type BudgetItemsResponse,
@@ -10,7 +11,11 @@ import {
 import { eq } from "drizzle-orm";
 
 export interface IStorage {
-  getTrips(): Promise<TripsListResponse>;
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+
+  getTrips(userId: number): Promise<TripsListResponse>;
   getTrip(id: number): Promise<TripResponse | undefined>;
   createTrip(trip: CreateTripRequest): Promise<TripResponse>;
   updateTrip(id: number, updates: UpdateTripRequest): Promise<TripResponse>;
@@ -38,8 +43,21 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async getTrips(): Promise<TripsListResponse> {
-    return await db.select().from(trips);
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+  async createUser(user: InsertUser): Promise<User> {
+    const [created] = await db.insert(users).values(user).returning();
+    return created;
+  }
+
+  async getTrips(userId: number): Promise<TripsListResponse> {
+    return await db.select().from(trips).where(eq(trips.userId, userId));
   }
   async getTrip(id: number): Promise<TripResponse | undefined> {
     const [trip] = await db.select().from(trips).where(eq(trips.id, id));

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useRoute, Link } from "wouter";
 import {
-  ArrowLeft, FileText, Plane, Building2, BookOpen, Shield, FolderOpen,
+  ArrowLeft, FileText, Plane, Building2, Shield, FolderOpen,
   Plus, Trash2, Copy, Check, Edit3, X
 } from "lucide-react";
 import { useTrip } from "@/hooks/use-trips";
@@ -17,13 +17,12 @@ import type { TravelDocument } from "@shared/schema";
 const DOC_TYPES = [
   { value: "flight", label: "Flight", icon: Plane, color: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
   { value: "hotel", label: "Hotel", icon: Building2, color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" },
-  { value: "passport", label: "Passport", icon: BookOpen, color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
   { value: "insurance", label: "Insurance", icon: Shield, color: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
   { value: "other", label: "Other", icon: FileText, color: "bg-gray-500/10 text-gray-600 dark:text-gray-400" },
 ];
 
 function getDocTypeConfig(type: string) {
-  return DOC_TYPES.find(d => d.value === type) || DOC_TYPES[4];
+  return DOC_TYPES.find(d => d.value === type) || DOC_TYPES[3];
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -237,7 +236,7 @@ export default function DocumentVault() {
             <div className="p-12 text-center border-2 border-dashed border-border rounded-2xl text-muted-foreground" data-testid="text-empty-vault">
               <FolderOpen className="h-16 w-16 mx-auto mb-4 opacity-30" />
               <h3 className="text-xl font-semibold mb-2">No documents yet</h3>
-              <p className="text-sm">Add your travel documents like flight bookings, hotel reservations, and passport info.</p>
+              <p className="text-sm">Add your travel documents like flight bookings, hotel reservations, and insurance details.</p>
             </div>
           ) : (
             <div className="space-y-8">

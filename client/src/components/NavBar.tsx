@@ -1,4 +1,7 @@
 import { Link } from "wouter";
+import { LogOut, User } from "lucide-react";
+import { useUser, useLogout } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
 
 function AnnaiLogo({ className }: { className?: string }) {
   return (
@@ -60,6 +63,9 @@ function AnnaiLogo({ className }: { className?: string }) {
 }
 
 export function NavBar() {
+  const { data: user } = useUser();
+  const logoutMutation = useLogout();
+
   return (
     <header className="sticky top-0 z-50 w-full border-b glass">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -69,6 +75,25 @@ export function NavBar() {
         >
           <AnnaiLogo className="h-12 w-auto" />
         </Link>
+
+        {user && (
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground flex items-center gap-1.5" data-testid="text-username">
+              <User className="h-4 w-4" />
+              {user.username}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => logoutMutation.mutate()}
+              className="text-muted-foreground rounded-xl"
+              data-testid="button-logout"
+            >
+              <LogOut className="h-4 w-4 mr-1.5" />
+              Sign Out
+            </Button>
+          </div>
+        )}
       </div>
     </header>
   );
