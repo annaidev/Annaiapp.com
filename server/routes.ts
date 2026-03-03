@@ -213,6 +213,41 @@ export async function registerRoutes(
     }
   });
 
+  app.post(api.ai.safetyMap.path, async (req, res) => {
+    try {
+      const { destination } = api.ai.safetyMap.input.parse(req.body);
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.1",
+        messages: [
+          {
+            role: "system",
+            content: `You are a travel safety data analyst. Given a destination, return a JSON object with:
+1. "center": { "lat": number, "lng": number } — the geographic center of the destination city.
+2. "zones": an array of 6-10 notable areas/neighborhoods, each with:
+   - "name": the area/neighborhood name
+   - "lat": latitude (number)
+   - "lng": longitude (number) 
+   - "radius": radius in meters (300-1500)
+   - "level": one of "safe", "caution", or "avoid"
+   - "description": a brief one-sentence reason
+Include a mix of safe tourist areas, areas requiring caution, and areas travelers should avoid. Use real neighborhood names and accurate coordinates. Return ONLY valid JSON.`
+          },
+          { role: "user", content: `Provide safety zone data for ${destination}.` }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) throw new Error("No response from AI");
+
+      res.json(JSON.parse(content));
+    } catch (error) {
+      console.error("AI Safety Map Error:", error);
+      res.status(500).json({ message: "Failed to generate safety map data" });
+    }
+  });
+
   // Call seed function at startup
   seedDatabase().catch(console.error);
 

@@ -42,6 +42,26 @@ export function useCulturalTips() {
   });
 }
 
+export function useSafetyMap() {
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (destination: string) => {
+      const res = await fetch(api.ai.safetyMap.path, {
+        method: api.ai.safetyMap.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destination }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to generate safety map");
+      return api.ai.safetyMap.responses[200].parse(await res.json());
+    },
+    onError: (error) => {
+      toast({ title: "Failed to load safety map", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
 export function useSafetyAdvice() {
   const { toast } = useToast();
 

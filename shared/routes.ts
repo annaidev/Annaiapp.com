@@ -134,6 +134,26 @@ export const api = {
         }),
       },
     },
+    safetyMap: {
+      method: 'POST' as const,
+      path: '/api/ai/safety-map' as const,
+      input: z.object({
+        destination: z.string(),
+      }),
+      responses: {
+        200: z.object({
+          center: z.object({ lat: z.number(), lng: z.number() }),
+          zones: z.array(z.object({
+            name: z.string(),
+            lat: z.number(),
+            lng: z.number(),
+            radius: z.number(),
+            level: z.enum(["safe", "caution", "avoid"]),
+            description: z.string(),
+          })),
+        }),
+      },
+    },
   }
 };
 

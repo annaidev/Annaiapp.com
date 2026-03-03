@@ -5,20 +5,20 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowLeft, MapPin, Calendar, Edit3, Briefcase, 
   Sparkles, ShieldAlert, Globe, ChevronRight, CheckCircle2,
-  AlertTriangle, Shield, Plus, Home
+  AlertTriangle, Shield, Plus, Home, Plane, Building2, Car
 } from "lucide-react";
 import { useTrip } from "@/hooks/use-trips";
-import { useCulturalTips, useSafetyAdvice, useGeneratePackingList } from "@/hooks/use-ai";
-import { useCreatePackingListItem } from "@/hooks/use-packing-lists";
+import { useCulturalTips, useSafetyAdvice } from "@/hooks/use-ai";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { TripForm } from "@/components/TripForm";
+import { SafetyMap } from "@/components/SafetyMap";
 
 const EXTERNAL_LINKS = [
   { name: "Airbnb", icon: <Home className="h-5 w-5" />, color: "bg-[#FF5A5F]/10 text-[#FF5A5F]", getUrl: (dest: string) => `https://www.airbnb.com/s/${encodeURIComponent(dest)}/homes` },
-  { name: "Flights", icon: "✈️", color: "bg-blue-500/10 text-blue-600", getUrl: (dest: string) => `https://www.google.com/travel/flights?q=${encodeURIComponent(dest)}` },
-  { name: "Hotels", icon: "🏨", color: "bg-indigo-500/10 text-indigo-600", getUrl: (dest: string) => `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest)}` },
-  { name: "Uber", icon: "🚗", color: "bg-black/10 text-black dark:bg-white/10 dark:text-white", getUrl: () => `https://m.uber.com/looking` },
+  { name: "Flights", icon: <Plane className="h-5 w-5" />, color: "bg-blue-500/10 text-blue-600", getUrl: (dest: string) => `https://www.google.com/travel/flights?q=${encodeURIComponent(dest)}` },
+  { name: "Hotels", icon: <Building2 className="h-5 w-5" />, color: "bg-indigo-500/10 text-indigo-600", getUrl: (dest: string) => `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest)}` },
+  { name: "Uber", icon: <Car className="h-5 w-5" />, color: "bg-black/10 text-black dark:bg-white/10 dark:text-white", getUrl: () => `https://m.uber.com/looking` },
 ];
 
 export default function TripDashboard() {
@@ -32,23 +32,11 @@ export default function TripDashboard() {
   
   const tipsMutation = useCulturalTips();
   const safetyMutation = useSafetyAdvice();
-  const packMutation = useGeneratePackingList();
-  const addItemMutation = useCreatePackingListItem();
 
-  const [aiContent, setAiContent] = useState<{type: string, content: string | string[]} | null>(null);
+  const [aiContent, setAiContent] = useState<{type: string, content: string} | null>(null);
 
   if (isLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>;
   if (!trip) return <div className="min-h-screen flex items-center justify-center">Trip not found</div>;
-
-  const handleGeneratePackList = () => {
-    packMutation.mutate({ destination: trip.destination, days: 5 }, {
-      onSuccess: (data) => setAiContent({ type: 'pack', content: data.items })
-    });
-  };
-
-  const handleSavePackItem = (item: string) => {
-    addItemMutation.mutate({ tripId, item });
-  };
 
   const handleGetTips = () => {
     tipsMutation.mutate(trip.destination, {
@@ -100,6 +88,7 @@ export default function TripDashboard() {
               onClick={() => setIsEditOpen(true)}
               variant="outline" 
               className="rounded-xl glass border-border hover:bg-muted h-12 px-6 shadow-sm"
+              data-testid="button-edit-trip"
             >
               <Edit3 className="h-4 w-4 mr-2" /> Edit Trip
             </Button>
@@ -111,12 +100,14 @@ export default function TripDashboard() {
           <button 
             onClick={() => setActiveTab("overview")}
             className={`pb-4 px-4 text-lg font-medium transition-colors border-b-2 ${activeTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            data-testid="tab-overview"
           >
             Overview & Planning
           </button>
           <button 
             onClick={() => setActiveTab("ai")}
             className={`pb-4 px-4 text-lg font-medium transition-colors border-b-2 flex items-center gap-2 ${activeTab === "ai" ? "border-accent text-accent" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            data-testid="tab-ai"
           >
             <Sparkles className="h-5 w-5" /> AI Tools
           </button>
@@ -152,22 +143,11 @@ export default function TripDashboard() {
                     </Link>
                   </div>
                   <p className="text-muted-foreground mb-6">Keep track of everything you need for the trip.</p>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <Link href={`/trips/${trip.id}/packing-list`} className="flex-1">
-                      <Button className="w-full rounded-xl bg-primary hover:bg-primary/90">
-                        Open Checklist
-                      </Button>
-                    </Link>
-                    <Button 
-                      onClick={handleGeneratePackList}
-                      disabled={packMutation.isPending}
-                      variant="outline"
-                      className="flex-1 rounded-xl border-primary/20 text-primary hover:bg-primary/5"
-                    >
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      {packMutation.isPending ? "Generating..." : "Get AI Suggestions"}
+                  <Link href={`/trips/${trip.id}/packing-list`} className="w-full">
+                    <Button className="w-full sm:w-auto rounded-xl bg-primary hover:bg-primary/90" data-testid="button-open-checklist">
+                      Open Checklist
                     </Button>
-                  </div>
+                  </Link>
                 </div>
 
                 {/* Cultural Insights in Overview */}
@@ -222,6 +202,7 @@ export default function TripDashboard() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center justify-between p-4 bg-card hover:bg-muted/50 transition-colors rounded-2xl border border-border/50 hover:shadow-md group"
+                    data-testid={`link-${link.name.toLowerCase()}`}
                   >
                     <div className="flex items-center gap-4">
                       <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${link.color}`}>
@@ -247,64 +228,35 @@ export default function TripDashboard() {
                   onClick={handleGetSafety} 
                   disabled={safetyMutation.isPending}
                   className={`w-full justify-start h-16 px-6 rounded-2xl text-lg ${aiContent?.type === 'safety' ? 'bg-destructive text-white shadow-lg' : 'bg-card text-foreground hover:bg-muted'}`}
+                  data-testid="button-safety-advice"
                 >
                   <ShieldAlert className="h-5 w-5 mr-3" /> 
                   {safetyMutation.isPending ? "Analyzing..." : "Safety & Embassy Info"}
                 </Button>
-
-                <div className="pt-4 border-t border-border/50">
-                  <p className="text-xs text-muted-foreground px-2 mb-2 uppercase tracking-wider font-semibold">Other AI Tools</p>
-                  <div className="space-y-2">
-                    <Button 
-                      onClick={handleGetTips} 
-                      disabled={tipsMutation.isPending}
-                      variant="ghost"
-                      className={`w-full justify-start h-12 px-4 rounded-xl ${aiContent?.type === 'tips' ? 'bg-accent/10 text-accent' : ''}`}
-                    >
-                      <Globe className="h-4 w-4 mr-3" /> 
-                      Cultural Etiquette
-                    </Button>
-                  </div>
-                </div>
+                <Button 
+                  onClick={handleGetTips} 
+                  disabled={tipsMutation.isPending}
+                  className={`w-full justify-start h-16 px-6 rounded-2xl text-lg ${aiContent?.type === 'tips' ? 'bg-accent text-white shadow-lg' : 'bg-card text-foreground hover:bg-muted'}`}
+                  data-testid="button-cultural-tips"
+                >
+                  <Globe className="h-5 w-5 mr-3" /> 
+                  {tipsMutation.isPending ? "Gathering..." : "Cultural Etiquette"}
+                </Button>
               </div>
               
-              <div className="md:col-span-2">
-                {!aiContent && !packMutation.isPending && !tipsMutation.isPending && !safetyMutation.isPending ? (
-                  <div className="h-full min-h-[400px] border-2 border-dashed border-border rounded-3xl flex flex-col items-center justify-center p-8 text-center bg-card/50">
+              <div className="md:col-span-2 space-y-8">
+                {!aiContent && !tipsMutation.isPending && !safetyMutation.isPending ? (
+                  <div className="h-full min-h-[300px] border-2 border-dashed border-border rounded-3xl flex flex-col items-center justify-center p-8 text-center bg-card/50">
                     <Sparkles className="h-16 w-16 text-muted-foreground/30 mb-4" />
                     <h3 className="text-xl font-semibold text-muted-foreground">Select an AI tool</h3>
-                    <p className="text-sm text-muted-foreground/70 mt-2 max-w-md">Let our AI assist you in creating the perfect itinerary and staying safe.</p>
+                    <p className="text-sm text-muted-foreground/70 mt-2 max-w-md">Get safety reports, embassy info, and cultural etiquette for your destination.</p>
                   </div>
                 ) : (
-                  <div className="bg-card rounded-3xl p-8 border border-border/50 shadow-xl min-h-[400px]">
-                    {packMutation.isPending || tipsMutation.isPending || safetyMutation.isPending ? (
+                  <div className="bg-card rounded-3xl p-8 border border-border/50 shadow-xl min-h-[300px]">
+                    {tipsMutation.isPending || safetyMutation.isPending ? (
                       <div className="flex flex-col items-center justify-center h-full space-y-4 py-20 text-muted-foreground">
                         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
                         <p className="animate-pulse">AI is working its magic...</p>
-                      </div>
-                    ) : aiContent?.type === 'pack' && Array.isArray(aiContent.content) ? (
-                      <div className="space-y-6">
-                        <h2 className="text-2xl font-bold flex items-center gap-2">
-                          <Briefcase className="text-primary" /> Suggested Items
-                        </h2>
-                        <div className="grid gap-3">
-                          {aiContent.content.map((item, i) => (
-                            <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-muted/30 border border-transparent hover:border-border transition-colors">
-                              <span className="font-medium">{item}</span>
-                              <Button 
-                                size="sm" 
-                                variant="ghost" 
-                                onClick={() => handleSavePackItem(item)}
-                                className="text-primary hover:bg-primary/10 rounded-lg"
-                              >
-                                <Plus className="h-4 w-4 mr-1" /> Add to List
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                        <Link href={`/trips/${trip.id}/packing-list`}>
-                          <Button className="w-full mt-6 rounded-xl h-12 bg-primary">View My List</Button>
-                        </Link>
                       </div>
                     ) : (
                       <div className="space-y-6">
@@ -321,6 +273,8 @@ export default function TripDashboard() {
                     )}
                   </div>
                 )}
+
+                <SafetyMap destination={trip.destination} />
               </div>
             </motion.div>
           )}

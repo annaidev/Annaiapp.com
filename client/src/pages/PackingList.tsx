@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useRoute, Link } from "wouter";
-import { ArrowLeft, CheckCircle2, Circle, Plus, Trash2, Briefcase } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, Plus, Trash2, Briefcase, Sparkles, Loader2 } from "lucide-react";
 import { useTrip } from "@/hooks/use-trips";
 import { 
   usePackingLists, 
@@ -8,6 +8,7 @@ import {
   useUpdatePackingListItem, 
   useDeletePackingListItem 
 } from "@/hooks/use-packing-lists";
+import { useGeneratePackingList } from "@/hooks/use-ai";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,8 +23,10 @@ export default function PackingList() {
   const addMutation = useCreatePackingListItem();
   const updateMutation = useUpdatePackingListItem();
   const deleteMutation = useDeletePackingListItem();
+  const packMutation = useGeneratePackingList();
 
   const [newItem, setNewItem] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
   if (isLoadingTrip || isLoadingItems) return <div className="min-h-screen bg-background flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>;
   if (!trip) return <div className="min-h-screen flex items-center justify-center">Trip not found</div>;
@@ -83,6 +86,65 @@ export default function PackingList() {
               </div>
             </div>
           </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 mb-6">
+            <Button
+              onClick={() => {
+                packMutation.mutate({ destination: trip.destination }, {
+                  onSuccess: (data) => {
+                    const existing = new Set((items || []).map(i => i.item.toLowerCase()));
+                    setSuggestions(data.items.filter(i => !existing.has(i.toLowerCase())));
+                  }
+                });
+              }}
+              disabled={packMutation.isPending}
+              variant="outline"
+              className="rounded-xl h-12 border-primary/20 text-primary hover:bg-primary/5"
+              data-testid="button-ai-suggestions"
+            >
+              {packMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
+              ) : (
+                <><Sparkles className="h-4 w-4 mr-2" /> Get AI Suggestions</>
+              )}
+            </Button>
+          </div>
+
+          {suggestions.length > 0 && (
+            <div className="mb-8 bg-primary/5 rounded-2xl p-6 border border-primary/10" data-testid="ai-suggestions-panel">
+              <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-4 flex items-center gap-2">
+                <Sparkles className="h-4 w-4" /> AI Suggestions
+              </h3>
+              <div className="grid gap-2">
+                {suggestions.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-card border border-border/50 hover:border-primary/30 transition-colors" data-testid={`suggestion-item-${i}`}>
+                    <span className="font-medium text-sm">{item}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        addMutation.mutate({ tripId, item });
+                        setSuggestions(prev => prev.filter((_, idx) => idx !== i));
+                      }}
+                      className="text-primary hover:bg-primary/10 rounded-lg h-8"
+                      data-testid={`button-add-suggestion-${i}`}
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Add
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSuggestions([])}
+                className="mt-3 text-muted-foreground"
+                data-testid="button-dismiss-suggestions"
+              >
+                Dismiss
+              </Button>
+            </div>
+          )}
 
           <form onSubmit={handleAdd} className="flex gap-3 mb-10">
             <Input 
