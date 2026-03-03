@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 function AnnaiLogo({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 44 56"
+      viewBox="0 0 44 68"
       className={className}
       xmlns="http://www.w3.org/2000/svg"
       aria-label="Annai"
@@ -18,22 +18,22 @@ function AnnaiLogo({ className }: { className?: string }) {
         </linearGradient>
       </defs>
 
-      <line x1="22" y1="1" x2="22" y2="14" stroke="#2D3748" strokeWidth="2.5" strokeLinecap="round" />
-
       <text
         x="22"
-        y="13"
+        y="14"
         textAnchor="middle"
         fontFamily="'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif"
-        fontSize="15"
+        fontSize="18"
         fontWeight="800"
         fill="#2D3748"
       >
         A
       </text>
 
-      <polygon points="22,16 4,54 22,44" fill="#2D3748" />
-      <polygon points="22,16 40,54 22,44" fill="none" stroke="url(#annai-arrow-g)" strokeWidth="2.2" strokeLinejoin="round" />
+      <line x1="22" y1="17" x2="22" y2="26" stroke="#2D3748" strokeWidth="2.2" strokeLinecap="round" />
+
+      <polygon points="22,26 4,66 22,54" fill="#2D3748" />
+      <polygon points="22,26 40,66 22,54" fill="none" stroke="url(#annai-arrow-g)" strokeWidth="2.2" strokeLinejoin="round" />
     </svg>
   );
 }
