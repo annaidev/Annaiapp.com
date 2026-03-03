@@ -5,24 +5,12 @@ import { useToast } from "@/hooks/use-toast";
 export function useTrips() {
   return useQuery({
     queryKey: [api.trips.list.path],
-    queryFn: async () => {
-      const res = await fetch(api.trips.list.path, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch trips");
-      return api.trips.list.responses[200].parse(await res.json());
-    },
   });
 }
 
 export function useTrip(id: number) {
   return useQuery({
-    queryKey: [api.trips.get.path, id],
-    queryFn: async () => {
-      const url = buildUrl(api.trips.get.path, { id });
-      const res = await fetch(url, { credentials: "include" });
-      if (res.status === 404) return null;
-      if (!res.ok) throw new Error("Failed to fetch trip");
-      return api.trips.get.responses[200].parse(await res.json());
-    },
+    queryKey: ['/api/trips', id],
     enabled: !!id,
   });
 }
@@ -70,7 +58,7 @@ export function useUpdateTrip() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [api.trips.list.path] });
-      queryClient.invalidateQueries({ queryKey: [api.trips.get.path, variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/trips', variables.id] });
       toast({ title: "Trip updated", description: "Your changes have been saved." });
     },
     onError: (error) => {
