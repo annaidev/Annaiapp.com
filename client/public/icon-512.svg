@@ -1,25 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <rect width="512" height="512" rx="80" fill="#FFF9F5"/>
   <defs>
-    <linearGradient id="gg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#5EC6C6"/>
-      <stop offset="100%" stop-color="#E05555"/>
-    </linearGradient>
-    <linearGradient id="pg" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#F0A830"/>
-      <stop offset="100%" stop-color="#E05555"/>
+    <linearGradient id="ag" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#E05555"/>
+      <stop offset="100%" stop-color="#F0A830"/>
     </linearGradient>
   </defs>
   <g transform="translate(256, 256)">
-    <circle cx="0" cy="0" r="160" fill="none" stroke="url(#gg)" stroke-width="14"/>
-    <ellipse cx="0" cy="0" rx="80" ry="160" fill="none" stroke="url(#gg)" stroke-width="9"/>
-    <line x1="-152" y1="0" x2="152" y2="0" stroke="url(#gg)" stroke-width="8"/>
-    <path d="M -140 -72 Q 0 -48, 140 -72" fill="none" stroke="url(#gg)" stroke-width="7"/>
-    <path d="M -140 72 Q 0 96, 140 72" fill="none" stroke="url(#gg)" stroke-width="7"/>
-    <path d="M 96,-176 Q 208,-80 176,64 Q 144,160 48,176" fill="none" stroke="url(#pg)" stroke-width="12" stroke-linecap="round" stroke-dasharray="16,24"/>
-    <g transform="translate(96,-176) rotate(30)">
-      <polygon points="0,-36 -16,16 0,5 16,16" fill="#F0A830"/>
-      <line x1="-28" y1="0" x2="28" y2="0" stroke="#F0A830" stroke-width="8" stroke-linecap="round"/>
-    </g>
+    <polygon points="0,-192 -112,144 0,80 112,144" fill="url(#ag)"/>
+    <text x="0" y="-32" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="112" font-weight="800" fill="#FFFFFF">A</text>
   </g>
 </svg>

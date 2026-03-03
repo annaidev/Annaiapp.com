@@ -6,53 +6,44 @@ import { Button } from "@/components/ui/button";
 function AnnaiLogo({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 200 56"
+      viewBox="0 0 190 56"
       className={className}
       xmlns="http://www.w3.org/2000/svg"
       aria-label="Annai"
     >
       <defs>
-        <linearGradient id="annai-globe-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#5EC6C6" />
-          <stop offset="100%" stopColor="#E05555" />
-        </linearGradient>
-        <linearGradient id="annai-plane-g" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#F0A830" />
-          <stop offset="100%" stopColor="#E05555" />
+        <linearGradient id="annai-arrow-g" x1="0.5" y1="0" x2="0.5" y2="1">
+          <stop offset="0%" stopColor="#E05555" />
+          <stop offset="100%" stopColor="#F0A830" />
         </linearGradient>
       </defs>
 
-      <g transform="translate(26, 28)">
-        <circle cx="0" cy="0" r="19" fill="none" stroke="url(#annai-globe-g)" strokeWidth="2.2" />
-        <ellipse cx="0" cy="0" rx="9.5" ry="19" fill="none" stroke="url(#annai-globe-g)" strokeWidth="1.4" />
-        <line x1="-18" y1="0" x2="18" y2="0" stroke="url(#annai-globe-g)" strokeWidth="1.3" />
-        <path d="M -16 -8.5 Q 0 -5.5, 16 -8.5" fill="none" stroke="url(#annai-globe-g)" strokeWidth="1.1" />
-        <path d="M -16 8.5 Q 0 11.5, 16 8.5" fill="none" stroke="url(#annai-globe-g)" strokeWidth="1.1" />
+      <g transform="translate(22, 28)">
+        <polygon points="0,-25 -14,19 0,10 14,19" fill="url(#annai-arrow-g)" />
 
-        <path
-          d="M 11,-20 Q 24,-9 21,7 Q 17,18 5,21"
-          fill="none"
-          stroke="url(#annai-plane-g)"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeDasharray="2,3"
-        />
-        <g transform="translate(11,-20) rotate(30)">
-          <polygon points="0,-4 -1.8,1.8 0,0.5 1.8,1.8" fill="#F0A830" />
-          <line x1="-3.2" y1="0" x2="3.2" y2="0" stroke="#F0A830" strokeWidth="1.1" strokeLinecap="round" />
-        </g>
+        <text
+          x="0"
+          y="-4"
+          textAnchor="middle"
+          fontFamily="'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif"
+          fontSize="14"
+          fontWeight="800"
+          fill="#FFFFFF"
+        >
+          A
+        </text>
       </g>
 
       <text
-        x="52"
-        y="37"
+        x="44"
+        y="38"
         fontFamily="'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif"
-        fontSize="30"
+        fontSize="32"
         fontWeight="700"
         fill="#2D3748"
         letterSpacing="-0.5"
       >
-        Annai
+        nnai
       </text>
     </svg>
   );
