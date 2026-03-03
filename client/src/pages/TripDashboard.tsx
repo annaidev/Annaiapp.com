@@ -185,7 +185,7 @@ export default function TripDashboard() {
             className={`pb-4 px-4 text-lg font-medium transition-colors border-b-2 flex items-center gap-2 ${activeTab === "ai" ? "border-secondary text-secondary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
             data-testid="tab-ai"
           >
-            <Sparkles className="h-5 w-5" /> AI Tools
+            <Sparkles className="h-5 w-5" /> Destination Info
           </button>
         </div>
 
