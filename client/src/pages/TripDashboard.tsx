@@ -25,7 +25,7 @@ const EXTERNAL_LINKS = [
 
 function getHeroImage(destination: string) {
   const city = destination.split(",")[0].trim();
-  return `https://source.unsplash.com/1200x400/?${encodeURIComponent(city)}+travel+landmark`;
+  return `https://loremflickr.com/1200/400/${encodeURIComponent(city)},travel,landmark`;
 }
 
 function getCountdownText(startDate: string | null, endDate: string | null) {

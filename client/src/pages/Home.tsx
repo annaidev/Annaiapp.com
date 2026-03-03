@@ -26,7 +26,7 @@ function getCountdown(startDate: string | null, endDate: string | null) {
 
 function getHeroImage(destination: string) {
   const city = destination.split(",")[0].trim();
-  return `https://source.unsplash.com/800x400/?${encodeURIComponent(city)}+travel+landmark`;
+  return `https://loremflickr.com/800/400/${encodeURIComponent(city)},travel,landmark`;
 }
 
 export default function Home() {
