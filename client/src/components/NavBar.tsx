@@ -3,45 +3,57 @@ import { Link } from "wouter";
 function AnnaiLogo({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 220 60"
+      viewBox="0 0 240 60"
       className={className}
       xmlns="http://www.w3.org/2000/svg"
       aria-label="Annai"
     >
-      <g transform="translate(2, 2) scale(0.9)">
-        <defs>
-          <clipPath id="a-outer">
-            <path d="M28 2 L2 55 Q10 42 22 38 Q30 35 35 40 Q40 45 48 52 L52 58 L52 55 L28 2 Z" />
-          </clipPath>
-        </defs>
+      <defs>
+        <linearGradient id="globe-grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#5EC6C6" />
+          <stop offset="100%" stopColor="#3BA8A8" />
+        </linearGradient>
+        <linearGradient id="path-grad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#F0A830" />
+          <stop offset="100%" stopColor="#E05555" />
+        </linearGradient>
+      </defs>
+
+      <g transform="translate(30, 30)">
+        <circle cx="0" cy="0" r="22" fill="url(#globe-grad)" />
+
+        <ellipse cx="0" cy="0" rx="9" ry="21" fill="none" stroke="white" strokeWidth="1.2" opacity="0.5" />
+        <ellipse cx="0" cy="0" rx="16" ry="21" fill="none" stroke="white" strokeWidth="1" opacity="0.35" />
+        <line x1="-21" y1="0" x2="21" y2="0" stroke="white" strokeWidth="1" opacity="0.45" />
+        <line x1="-19" y1="-8" x2="19" y2="-8" stroke="white" strokeWidth="0.8" opacity="0.3" />
+        <line x1="-19" y1="8" x2="19" y2="8" stroke="white" strokeWidth="0.8" opacity="0.3" />
 
         <path
-          d="M28 2 Q26 8 20 20 Q14 32 6 48 Q4 52 2 55 Q10 42 22 38 Q30 35 35 40 Q40 45 48 52 L52 58 L52 55 L28 2 Z"
+          d="M -18 12 Q -8 -18 12 -20 Q 24 -20 26 -8"
+          fill="none"
+          stroke="url(#path-grad)"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+        />
+
+        <polygon
+          points="26,-8 28,-14 22,-11"
           fill="#E05555"
-          strokeLinejoin="round"
         />
 
-        <path
-          d="M28 6 L22 20 Q20 24 18 26 Q24 22 30 26 Q34 28 36 32 L28 6 Z"
-          fill="#5EC6C6"
-        />
-
-        <path
-          d="M18 26 Q14 32 8 46 Q6 50 5 53 Q12 42 22 39 Q30 36 35 40 Q40 44 46 50 L36 32 Q34 28 30 26 Q24 22 18 26 Z"
-          fill="#F0A830"
-        />
+        <circle cx="-18" cy="12" r="2.5" fill="#F0A830" />
       </g>
 
       <text
-        x="55"
-        y="50"
-        fontFamily="'Outfit', 'Plus Jakarta Sans', sans-serif"
-        fontSize="42"
+        x="62"
+        y="43"
+        fontFamily="'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif"
+        fontSize="36"
         fontWeight="700"
-        fill="#E05555"
+        fill="#2D3748"
         letterSpacing="-0.5"
       >
-        nnai
+        Annai
       </text>
     </svg>
   );
