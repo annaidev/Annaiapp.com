@@ -9,65 +9,65 @@
     --font-sans: 'Plus Jakarta Sans', sans-serif;
     --font-display: 'Outfit', sans-serif;
 
-    --background: 210 20% 98%;
-    --foreground: 222 47% 11%;
+    --background: 40 50% 98%;
+    --foreground: 200 15% 25%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 200 15% 25%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 200 15% 25%;
 
-    --primary: 221 83% 53%;
+    --primary: 198 34% 65%;
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 214 32% 91%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 100 45% 55%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 40 30% 95%;
+    --muted-foreground: 200 10% 45%;
 
-    --accent: 262 83% 58%;
+    --accent: 200 25% 35%;
     --accent-foreground: 210 40% 98%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 53%;
+    --border: 200 10% 90%;
+    --input: 200 10% 90%;
+    --ring: 198 34% 65%;
 
     --radius: 1rem;
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+    --background: 200 15% 15%;
+    --foreground: 40 30% 95%;
 
-    --card: 222 47% 13%;
-    --card-foreground: 210 40% 98%;
+    --card: 200 15% 18%;
+    --card-foreground: 40 30% 95%;
 
-    --popover: 222 47% 13%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 200 15% 18%;
+    --popover-foreground: 40 30% 95%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 198 34% 60%;
+    --primary-foreground: 200 15% 15%;
 
-    --secondary: 217 32% 17%;
+    --secondary: 100 45% 50%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217 32% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 200 15% 22%;
+    --muted-foreground: 200 10% 65%;
 
-    --accent: 263 70% 50%;
+    --accent: 200 25% 45%;
     --accent-foreground: 210 40% 98%;
 
     --destructive: 0 62% 30%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217 32% 17%;
-    --input: 217 32% 17%;
-    --ring: 224 71% 4%;
+    --border: 200 15% 25%;
+    --input: 200 15% 25%;
+    --ring: 198 34% 60%;
   }
 }
 

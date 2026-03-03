@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { PlaneTakeoff } from "lucide-react";
+import logo from "@assets/Anna_logo_number_1_1772500442949.png";
 
 export function NavBar() {
   return (
@@ -9,9 +9,7 @@ export function NavBar() {
           href="/" 
           className="flex items-center gap-2 text-primary hover:opacity-80 transition-opacity"
         >
-          <div className="bg-primary/10 p-2 rounded-xl">
-            <PlaneTakeoff className="h-6 w-6" />
-          </div>
+          <img src={logo} alt="Annai Logo" className="h-10 w-10 object-contain" />
           <span className="text-xl font-bold font-display tracking-tight text-foreground">Annai</span>
         </Link>
       </div>
