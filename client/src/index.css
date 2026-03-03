@@ -95,6 +95,6 @@
   }
 
   .hover-lift {
-    @apply transition-all duration-300 ease-out hover:-translate-y-3 hover:shadow-2xl hover:scale-110 hover:border-primary hover:bg-primary/10;
+    @apply transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl hover:border-primary hover:bg-primary/10;
   }
 }

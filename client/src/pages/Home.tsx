@@ -91,7 +91,7 @@ export default function Home() {
                   className="group block relative h-full glass-card rounded-3xl p-6 hover-lift"
                 >
                   {/* landing page hero scenic mountain landscape */}
-                  <div className="absolute inset-0 z-0 opacity-0 group-hover:opacity-5 transition-opacity duration-500 rounded-3xl overflow-hidden pointer-events-none">
+                  <div className="absolute inset-0 z-0 opacity-0 group-hover:opacity-30 transition-opacity duration-500 rounded-3xl overflow-hidden pointer-events-none">
                      <img src="https://images.unsplash.com/photo-1488085061387-422e29b40080?w=800&auto=format&fit=crop" alt="" className="w-full h-full object-cover" />
                   </div>
                   
