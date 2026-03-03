@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import brandLogo from "@assets/Screenshot_2025-06-19_153050_1772501222359.png";
 
 export function NavBar() {
   return (
@@ -6,9 +7,9 @@ export function NavBar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <Link 
           href="/" 
-          className="flex items-center gap-2 text-primary hover:opacity-80 transition-opacity"
+          className="flex items-center hover:opacity-80 transition-opacity"
         >
-          <span className="text-2xl font-bold font-display tracking-tight text-primary">Annai</span>
+          <img src={brandLogo} alt="Annai" className="h-12 object-contain" />
         </Link>
       </div>
     </header>
