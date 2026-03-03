@@ -6,57 +6,40 @@ import { Button } from "@/components/ui/button";
 function AnnaiLogo({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 240 60"
+      viewBox="0 0 180 56"
       className={className}
       xmlns="http://www.w3.org/2000/svg"
       aria-label="Annai"
     >
       <defs>
-        <linearGradient id="globe-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#5EC6C6" />
-          <stop offset="100%" stopColor="#3BA8A8" />
-        </linearGradient>
-        <linearGradient id="path-grad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#F0A830" />
-          <stop offset="100%" stopColor="#E05555" />
+        <linearGradient id="arrow-grad" x1="0.5" y1="0" x2="0.5" y2="1">
+          <stop offset="0%" stopColor="#E05555" />
+          <stop offset="100%" stopColor="#F0A830" />
         </linearGradient>
       </defs>
 
-      <g transform="translate(30, 30)">
-        <circle cx="0" cy="0" r="22" fill="url(#globe-grad)" />
+      <g transform="translate(20, 28)">
+        <polygon points="0,-24 -14,18 0,10 14,18" fill="url(#arrow-grad)" />
 
-        <ellipse cx="0" cy="0" rx="9" ry="21" fill="none" stroke="white" strokeWidth="1.2" opacity="0.5" />
-        <ellipse cx="0" cy="0" rx="16" ry="21" fill="none" stroke="white" strokeWidth="1" opacity="0.35" />
-        <line x1="-21" y1="0" x2="21" y2="0" stroke="white" strokeWidth="1" opacity="0.45" />
-        <line x1="-19" y1="-8" x2="19" y2="-8" stroke="white" strokeWidth="0.8" opacity="0.3" />
-        <line x1="-19" y1="8" x2="19" y2="8" stroke="white" strokeWidth="0.8" opacity="0.3" />
+        <circle cx="0" cy="0" r="4.5" fill="none" stroke="#2D3748" strokeWidth="2" />
+        <circle cx="0" cy="0" r="1.5" fill="#2D3748" />
 
-        <path
-          d="M -18 12 Q -8 -18 12 -20 Q 24 -20 26 -8"
-          fill="none"
-          stroke="url(#path-grad)"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-        />
-
-        <polygon
-          points="26,-8 28,-14 22,-11"
-          fill="#E05555"
-        />
-
-        <circle cx="-18" cy="12" r="2.5" fill="#F0A830" />
+        <line x1="0" y1="-8" x2="0" y2="-12" stroke="#2D3748" strokeWidth="1.5" strokeLinecap="round" />
+        <line x1="0" y1="8" x2="0" y2="12" stroke="#2D3748" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+        <line x1="-8" y1="0" x2="-12" y2="0" stroke="#2D3748" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+        <line x1="8" y1="0" x2="12" y2="0" stroke="#2D3748" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
       </g>
 
       <text
-        x="62"
-        y="43"
+        x="42"
+        y="41"
         fontFamily="'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif"
         fontSize="36"
         fontWeight="700"
         fill="#2D3748"
         letterSpacing="-0.5"
       >
-        Annai
+        nnai
       </text>
     </svg>
   );
