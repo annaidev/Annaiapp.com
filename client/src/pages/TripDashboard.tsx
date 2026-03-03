@@ -152,11 +152,22 @@ export default function TripDashboard() {
                     </Link>
                   </div>
                   <p className="text-muted-foreground mb-6">Keep track of everything you need for the trip.</p>
-                  <Link href={`/trips/${trip.id}/packing-list`} className="w-full">
-                    <Button className="w-full sm:w-auto rounded-xl bg-primary hover:bg-primary/90">
-                      Open Checklist
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Link href={`/trips/${trip.id}/packing-list`} className="flex-1">
+                      <Button className="w-full rounded-xl bg-primary hover:bg-primary/90">
+                        Open Checklist
+                      </Button>
+                    </Link>
+                    <Button 
+                      onClick={handleGeneratePackList}
+                      disabled={packMutation.isPending}
+                      variant="outline"
+                      className="flex-1 rounded-xl border-primary/20 text-primary hover:bg-primary/5"
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      {packMutation.isPending ? "Generating..." : "Get AI Suggestions"}
                     </Button>
-                  </Link>
+                  </div>
                 </div>
 
                 {/* Cultural Insights in Overview */}
@@ -244,15 +255,6 @@ export default function TripDashboard() {
                 <div className="pt-4 border-t border-border/50">
                   <p className="text-xs text-muted-foreground px-2 mb-2 uppercase tracking-wider font-semibold">Other AI Tools</p>
                   <div className="space-y-2">
-                    <Button 
-                      onClick={handleGeneratePackList} 
-                      disabled={packMutation.isPending}
-                      variant="ghost"
-                      className={`w-full justify-start h-12 px-4 rounded-xl ${aiContent?.type === 'pack' ? 'bg-primary/10 text-primary' : ''}`}
-                    >
-                      <Briefcase className="h-4 w-4 mr-3" /> 
-                      Smart Packing Suggestion
-                    </Button>
                     <Button 
                       onClick={handleGetTips} 
                       disabled={tipsMutation.isPending}
