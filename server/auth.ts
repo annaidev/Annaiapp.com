@@ -84,7 +84,7 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req: Request, res: Response) => {
     try {
-      const { username, password } = req.body;
+      const { username, password, securityQuestion, securityAnswer } = req.body;
       if (!username || !password) {
         return res.status(400).json({ message: "Username and password are required" });
       }
@@ -94,6 +94,9 @@ export function setupAuth(app: Express) {
       if (password.length < 6) {
         return res.status(400).json({ message: "Password must be at least 6 characters" });
       }
+      if (!securityQuestion || !securityAnswer) {
+        return res.status(400).json({ message: "Security question and answer are required" });
+      }
 
       const existing = await storage.getUserByUsername(username);
       if (existing) {
@@ -101,7 +104,13 @@ export function setupAuth(app: Express) {
       }
 
       const hashedPassword = await hashPassword(password);
-      const user = await storage.createUser({ username, password: hashedPassword });
+      const hashedAnswer = (securityAnswer as string).trim().toLowerCase();
+      const user = await storage.createUser({
+        username,
+        password: hashedPassword,
+        securityQuestion,
+        securityAnswer: hashedAnswer,
+      });
 
       req.login(user, (err) => {
         if (err) return res.status(500).json({ message: "Login failed after registration" });
@@ -110,6 +119,45 @@ export function setupAuth(app: Express) {
     } catch (err) {
       console.error("Registration error:", err);
       return res.status(500).json({ message: "Registration failed" });
+    }
+  });
+
+  app.post("/api/forgot-password/question", async (req: Request, res: Response) => {
+    try {
+      const { username } = req.body;
+      if (!username) return res.status(400).json({ message: "Username is required" });
+      const user = await storage.getUserByUsername(username);
+      if (!user || !user.securityQuestion) {
+        return res.status(404).json({ message: "Account not found or no security question set" });
+      }
+      return res.json({ securityQuestion: user.securityQuestion });
+    } catch (err) {
+      return res.status(500).json({ message: "Something went wrong" });
+    }
+  });
+
+  app.post("/api/forgot-password/reset", async (req: Request, res: Response) => {
+    try {
+      const { username, securityAnswer, newPassword } = req.body;
+      if (!username || !securityAnswer || !newPassword) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+      if ((newPassword as string).length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      const user = await storage.getUserByUsername(username);
+      if (!user || !user.securityAnswer) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+      const normalizedAnswer = (securityAnswer as string).trim().toLowerCase();
+      if (normalizedAnswer !== user.securityAnswer) {
+        return res.status(401).json({ message: "Incorrect security answer" });
+      }
+      const hashedPassword = await hashPassword(newPassword);
+      await storage.updateUserPassword(user.id, hashedPassword);
+      return res.json({ message: "Password reset successfully" });
+    } catch (err) {
+      return res.status(500).json({ message: "Something went wrong" });
     }
   });
 

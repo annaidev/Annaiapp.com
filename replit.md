@@ -16,6 +16,10 @@ A comprehensive travel companion app with user authentication. Each traveler has
 - All API routes protected with requireAuth middleware
 - Trips scoped to userId — each user only sees their own data
 - Frontend gates on /api/user check; unauthenticated users see AuthPage
+- Password visibility toggle (eye icon) on login and registration forms
+- Security question required during registration (stored lowercase for case-insensitive matching)
+- Forgot password flow: enter username → answer security question → set new password
+- API endpoints: POST /api/forgot-password/question, POST /api/forgot-password/reset
 
 ## Project Structure
 - `shared/schema.ts` - Drizzle ORM schema (users, trips, packing_lists, budget_items, travel_documents, itinerary_items)
@@ -24,7 +28,7 @@ A comprehensive travel companion app with user authentication. Each traveler has
 - `server/routes.ts` - Express API routes (CRUD + AI endpoints, all protected)
 - `server/storage.ts` - Database storage interface
 - `client/src/pages/` - AuthPage, Home, TripDashboard, PackingList, BudgetTracker, DocumentVault, ItineraryBuilder
-- `client/src/components/` - NavBar (SVG globe logo + user/logout), TripForm, SafetyMap
+- `client/src/components/` - NavBar (two-tone north-seeking arrow logo with "A" + user/logout), TripForm, SafetyMap
 - `client/src/hooks/` - use-auth, use-trips, use-packing-lists, use-documents, use-ai
 
 ## Key Features

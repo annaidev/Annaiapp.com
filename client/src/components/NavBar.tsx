@@ -19,7 +19,8 @@ function AnnaiLogo({ className }: { className?: string }) {
       </defs>
 
       <g transform="translate(22, 28)">
-        <polygon points="0,-25 -14,19 0,10 14,19" fill="url(#annai-arrow-g)" />
+        <polygon points="0,-25 -14,19 0,10" fill="#2D3748" />
+        <polygon points="0,-25 14,19 0,10" fill="url(#annai-arrow-g)" />
 
         <text
           x="0"

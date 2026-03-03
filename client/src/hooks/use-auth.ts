@@ -24,7 +24,7 @@ export function useLogin() {
 
 export function useRegister() {
   return useMutation({
-    mutationFn: async (data: { username: string; password: string }) => {
+    mutationFn: async (data: { username: string; password: string; securityQuestion: string; securityAnswer: string }) => {
       const res = await apiRequest("POST", "/api/register", data);
       return res.json();
     },

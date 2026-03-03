@@ -8,6 +8,8 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  securityQuestion: text("security_question"),
+  securityAnswer: text("security_answer"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -7,7 +7,8 @@
     </linearGradient>
   </defs>
   <g transform="translate(256, 256)">
-    <polygon points="0,-192 -112,144 0,80 112,144" fill="url(#ag)"/>
+    <polygon points="0,-192 -112,144 0,80" fill="#2D3748"/>
+    <polygon points="0,-192 112,144 0,80" fill="url(#ag)"/>
     <text x="0" y="-32" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="112" font-weight="800" fill="#FFFFFF">A</text>
   </g>
 </svg>
