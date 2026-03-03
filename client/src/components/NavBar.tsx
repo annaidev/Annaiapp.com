@@ -20,14 +20,6 @@ function AnnaiLogo({ className }: { className?: string }) {
 
       <g transform="translate(20, 28)">
         <polygon points="0,-24 -14,18 0,10 14,18" fill="url(#arrow-grad)" />
-
-        <circle cx="0" cy="0" r="4.5" fill="none" stroke="#2D3748" strokeWidth="2" />
-        <circle cx="0" cy="0" r="1.5" fill="#2D3748" />
-
-        <line x1="0" y1="-8" x2="0" y2="-12" stroke="#2D3748" strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="0" y1="8" x2="0" y2="12" stroke="#2D3748" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
-        <line x1="-8" y1="0" x2="-12" y2="0" stroke="#2D3748" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
-        <line x1="8" y1="0" x2="12" y2="0" stroke="#2D3748" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
       </g>
 
       <text
