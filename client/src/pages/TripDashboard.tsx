@@ -223,6 +223,10 @@ export default function TripDashboard() {
               exit={{ opacity: 0, y: -10 }}
               className="grid grid-cols-1 md:grid-cols-3 gap-8"
             >
+              <div className="md:col-span-3 mb-2">
+                <SafetyMap destination={trip.destination} />
+              </div>
+
               <div className="md:col-span-1 space-y-4">
                 <Button 
                   onClick={handleGetSafety} 
@@ -273,8 +277,6 @@ export default function TripDashboard() {
                     )}
                   </div>
                 )}
-
-                <SafetyMap destination={trip.destination} />
               </div>
             </motion.div>
           )}

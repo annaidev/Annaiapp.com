@@ -180,8 +180,8 @@ export async function registerRoutes(
       const response = await openai.chat.completions.create({
         model: "gpt-5.1",
         messages: [
-          { role: "system", content: "You are a travel expert providing concise, actionable cultural customs and etiquette tips. Format with markdown." },
-          { role: "user", content: `Give me 3-5 important cultural customs, tips, and etiquette advice for visiting ${destination}.` }
+          { role: "system", content: "You are a travel expert providing concise, actionable cultural customs and etiquette tips. Always respond in English. Format with markdown." },
+          { role: "user", content: `Give me 3-5 important cultural customs, tips, and etiquette advice for visiting ${destination}. Respond entirely in English.` }
         ],
       });
       
@@ -200,8 +200,8 @@ export async function registerRoutes(
       const response = await openai.chat.completions.create({
         model: "gpt-5.1",
         messages: [
-          { role: "system", content: "You are a travel safety and diplomatic expert. Provide concise advice on areas to avoid, common scams, and general safety. ALSO, if provided with a citizenship, find and include the location and contact information for the nearest embassy or consulate of that country in the destination. Format with clear markdown headings." },
-          { role: "user", content: `What are the safety concerns and embassy information for a ${citizenship || "traveler"} visiting ${destination}?` }
+          { role: "system", content: "You are a travel safety and diplomatic expert. Provide concise advice on areas to avoid, common scams, and general safety. ALSO, if provided with a citizenship, find and include the location and contact information for the nearest embassy or consulate of that country in the destination. Always respond in English. Format with clear markdown headings." },
+          { role: "user", content: `What are the safety concerns and embassy information for a ${citizenship || "traveler"} visiting ${destination}? Respond entirely in English.` }
         ],
       });
       
@@ -231,9 +231,9 @@ export async function registerRoutes(
    - "radius": radius in meters (300-1500)
    - "level": one of "safe", "caution", or "avoid"
    - "description": a brief one-sentence reason
-Include a mix of safe tourist areas, areas requiring caution, and areas travelers should avoid. Use real neighborhood names and accurate coordinates. Return ONLY valid JSON.`
+Include a mix of safe tourist areas, areas requiring caution, and areas travelers should avoid. Use real neighborhood names and accurate coordinates. All names and descriptions must be in English. Return ONLY valid JSON.`
           },
-          { role: "user", content: `Provide safety zone data for ${destination}.` }
+          { role: "user", content: `Provide safety zone data for ${destination}. Use English for all names and descriptions.` }
         ],
         response_format: { type: "json_object" },
       });
