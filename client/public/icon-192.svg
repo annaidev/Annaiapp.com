@@ -1,13 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
   <rect width="192" height="192" rx="32" fill="#FFF9F5"/>
   <defs>
-    <linearGradient id="ag" x1="0.5" y1="0" x2="0.5" y2="1">
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E05555"/>
+      <stop offset="50%" stop-color="#F0A830"/>
+      <stop offset="100%" stop-color="#5EC6C6"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#E05555"/>
       <stop offset="100%" stop-color="#F0A830"/>
     </linearGradient>
+    <clipPath id="gc">
+      <circle cx="96" cy="96" r="60"/>
+    </clipPath>
   </defs>
-  <text x="96" y="52" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="50" font-weight="800" fill="#2D3748">A</text>
-  <line x1="96" y1="58" x2="96" y2="80" stroke="#2D3748" stroke-width="6" stroke-linecap="round"/>
-  <polygon points="96,80 40,176 96,144" fill="#2D3748"/>
-  <polygon points="96,80 152,176 96,144" fill="none" stroke="url(#ag)" stroke-width="6" stroke-linejoin="round"/>
+  <circle cx="96" cy="96" r="60" fill="none" stroke="url(#g1)" stroke-width="5"/>
+  <g clip-path="url(#gc)" stroke="#2D3748" stroke-width="2.5" fill="none" opacity="0.3">
+    <ellipse cx="96" cy="96" rx="28" ry="60"/>
+    <ellipse cx="96" cy="96" rx="48" ry="60"/>
+    <line x1="36" y1="72" x2="156" y2="72"/>
+    <line x1="36" y1="96" x2="156" y2="96"/>
+    <line x1="36" y1="120" x2="156" y2="120"/>
+  </g>
+  <path d="M 42,128 Q 68,40 120,56 Q 156,66 148,112" fill="none" stroke="url(#g2)" stroke-width="4" stroke-linecap="round" stroke-dasharray="6,8"/>
+  <g transform="translate(144,58) rotate(45)" fill="#E05555">
+    <path d="M 0,0 L -8,-3 L -18,0 L -8,3 Z"/>
+    <path d="M -9,-10 L -10.5,0 L -9,0 Z" opacity="0.7"/>
+    <path d="M -9,10 L -10.5,0 L -9,0 Z" opacity="0.7"/>
+  </g>
 </svg>

@@ -6,7 +6,7 @@ A comprehensive travel companion app with user authentication. Each traveler has
 ## Tech Stack
 - **Frontend**: React + Vite, TailwindCSS, shadcn/ui, Wouter routing, TanStack Query, Framer Motion, Leaflet (maps)
 - **Backend**: Express.js, Drizzle ORM, PostgreSQL, Passport.js (local strategy), express-session with connect-pg-simple
-- **AI**: OpenAI via Replit AI Integrations (env vars: AI_INTEGRATIONS_OPENAI_API_KEY, AI_INTEGRATIONS_OPENAI_BASE_URL), model: gpt-5.1
+- **AI**: OpenAI direct API (OPENAI_API_KEY), model: gpt-4o-mini via aiChat() helper in server/routes.ts
 
 ## Authentication
 - Passport.js with local strategy (username/password)
@@ -28,7 +28,7 @@ A comprehensive travel companion app with user authentication. Each traveler has
 - `server/routes.ts` - Express API routes (CRUD + AI endpoints, all protected)
 - `server/storage.ts` - Database storage interface
 - `client/src/pages/` - AuthPage, Home, TripDashboard, PackingList, BudgetTracker, DocumentVault, ItineraryBuilder
-- `client/src/components/` - NavBar (two-tone north-seeking arrow logo with "A" + user/logout), TripForm, SafetyMap
+- `client/src/components/` - NavBar (globe + airplane travel logo with "Annai" wordmark + user/logout), TripForm, SafetyMap
 - `client/src/hooks/` - use-auth, use-trips, use-packing-lists, use-documents, use-ai
 
 ## Key Features
