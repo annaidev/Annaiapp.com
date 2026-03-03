@@ -12,10 +12,12 @@ const openai = new OpenAI({
 
 const AI_MODEL = "gpt-4o-mini";
 
-async function aiChat(messages: { role: string; content: string }[]): Promise<string> {
+async function aiChat(messages: { role: string; content: string }[], jsonMode = false): Promise<string> {
   const response = await openai.chat.completions.create({
     model: AI_MODEL,
     messages: messages as any,
+    max_tokens: 4096,
+    ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
   });
   return response.choices[0]?.message?.content || "";
 }
@@ -179,10 +181,10 @@ export async function registerRoutes(
       
       const prompt = `Generate a concise packing list for a trip to ${destination}${days ? ` for ${days} days` : ''}. Return ONLY a JSON object with a single key 'items' containing an array of strings. No explanation, no markdown, just the JSON.`;
       
-      const content = await aiChat([{ role: "user", content: prompt }]);
+      const content = await aiChat([{ role: "user", content: prompt }], true);
       if (!content) throw new Error("No response from AI");
       
-      res.json(JSON.parse(extractJson(content)));
+      res.json(JSON.parse(content));
     } catch (error) {
       console.error("AI Packing List Error:", error);
       res.status(500).json({ message: "Failed to generate packing list" });
@@ -228,22 +230,16 @@ export async function registerRoutes(
       const content = await aiChat([
         {
           role: "system",
-          content: `You are a travel safety data analyst. Given a destination, return a JSON object with:
-1. "center": { "lat": number, "lng": number } — the geographic center of the destination city.
-2. "zones": an array of 6-10 notable areas/neighborhoods, each with:
-   - "name": the area/neighborhood name
-   - "lat": latitude (number)
-   - "lng": longitude (number) 
-   - "radius": radius in meters (300-1500)
-   - "level": one of "safe", "caution", or "avoid"
-   - "description": a brief one-sentence reason
-Include a mix of safe tourist areas, areas requiring caution, and areas travelers should avoid. Use real neighborhood names and accurate coordinates. All names and descriptions must be in English. Return ONLY the JSON object, no explanation, no markdown.`
+          content: `You are a travel safety data analyst. Return a JSON object with:
+1. "center": {"lat": number, "lng": number} — city center coordinates.
+2. "zones": array of 6 areas, each with: "name" (string), "lat" (number), "lng" (number), "radius" (number, 300-1500 meters), "level" ("safe"|"caution"|"avoid"), "description" (one short sentence).
+Include a mix of safe, caution, and avoid areas. Use real neighborhood names and accurate coordinates. All text in English. Return ONLY valid JSON.`
         },
-        { role: "user", content: `Provide safety zone data for ${destination}. Use English for all names and descriptions.` }
-      ]);
+        { role: "user", content: `Safety zone data for ${destination}.` }
+      ], true);
       if (!content) throw new Error("No response from AI");
 
-      res.json(JSON.parse(extractJson(content)));
+      res.json(JSON.parse(content));
     } catch (error) {
       console.error("AI Safety Map Error:", error);
       res.status(500).json({ message: "Failed to generate safety map data" });
