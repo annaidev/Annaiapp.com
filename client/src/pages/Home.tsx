@@ -114,7 +114,7 @@ export default function Home() {
                     <div className="absolute inset-0 z-0">
                       <img 
                         src={getHeroImage(trip.destination)} 
-                        alt={trip.destination}
+                        alt=""
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/10" />
@@ -145,10 +145,6 @@ export default function Home() {
                       </div>
                       
                       <div className="mt-auto">
-                        <h3 className="text-2xl font-bold text-white mb-2 line-clamp-1 drop-shadow-md" data-testid={`text-destination-${trip.id}`}>
-                          {trip.destination}
-                        </h3>
-                        
                         {(trip.startDate || trip.endDate) && (
                           <div className="flex items-center text-white/80 mb-3 font-medium text-sm">
                             <CalendarIcon className="h-4 w-4 mr-2 opacity-70" />
