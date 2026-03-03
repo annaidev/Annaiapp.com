@@ -3,43 +3,42 @@ import { Link } from "wouter";
 function AnnaiLogo({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 200 60"
+      viewBox="0 0 220 60"
       className={className}
       xmlns="http://www.w3.org/2000/svg"
       aria-label="Annai"
     >
-      <defs>
-        <clipPath id="mountain-clip">
-          <path d="M5 52 L30 5 L55 52 Z" />
-        </clipPath>
-      </defs>
+      <g transform="translate(2, 2) scale(0.9)">
+        <defs>
+          <clipPath id="a-outer">
+            <path d="M28 2 L2 55 Q10 42 22 38 Q30 35 35 40 Q40 45 48 52 L52 58 L52 55 L28 2 Z" />
+          </clipPath>
+        </defs>
 
-      <g clipPath="url(#mountain-clip)">
-        <rect x="5" y="5" width="50" height="25" fill="#4A90B8" />
         <path
-          d="M5 30 Q15 22 25 30 Q35 38 45 28 Q50 24 55 27 L55 52 L5 52 Z"
-          fill="#3B8C5E"
+          d="M28 2 Q26 8 20 20 Q14 32 6 48 Q4 52 2 55 Q10 42 22 38 Q30 35 35 40 Q40 45 48 52 L52 58 L52 55 L28 2 Z"
+          fill="#2D5A6B"
+          strokeLinejoin="round"
+        />
+
+        <path
+          d="M28 6 L22 20 Q20 24 18 26 Q24 22 30 26 Q34 28 36 32 L28 6 Z"
+          fill="#89C4E1"
+        />
+
+        <path
+          d="M18 26 Q14 32 8 46 Q6 50 5 53 Q12 42 22 39 Q30 36 35 40 Q40 44 46 50 L36 32 Q34 28 30 26 Q24 22 18 26 Z"
+          fill="#5EA55B"
         />
       </g>
 
-      <path
-        d="M5 52 L30 5 L55 52"
-        fill="none"
-        stroke="#1E4D5E"
-        strokeWidth="3"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-
-      <line x1="15" y1="38" x2="45" y2="38" stroke="#1E4D5E" strokeWidth="3" strokeLinecap="round" />
-
       <text
-        x="58"
+        x="55"
         y="50"
         fontFamily="'Outfit', 'Plus Jakarta Sans', sans-serif"
         fontSize="42"
         fontWeight="700"
-        fill="#1E4D5E"
+        fill="#2D5A6B"
         letterSpacing="-0.5"
       >
         nnai
