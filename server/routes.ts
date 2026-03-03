@@ -30,7 +30,10 @@ export async function registerRoutes(
 
   app.post(api.trips.create.path, requireAuth, async (req, res) => {
     try {
-      const input = api.trips.create.input.parse(req.body);
+      const body = { ...req.body };
+      if (body.startDate && typeof body.startDate === 'string') body.startDate = new Date(body.startDate);
+      if (body.endDate && typeof body.endDate === 'string') body.endDate = new Date(body.endDate);
+      const input = api.trips.create.input.parse(body);
       const trip = await storage.createTrip({ ...input, userId: req.user!.id });
       
       try {
@@ -80,7 +83,10 @@ export async function registerRoutes(
       if (!trip || trip.userId !== req.user!.id) {
         return res.status(404).json({ message: 'Trip not found' });
       }
-      const input = api.trips.update.input.parse(req.body);
+      const body = { ...req.body };
+      if (body.startDate && typeof body.startDate === 'string') body.startDate = new Date(body.startDate);
+      if (body.endDate && typeof body.endDate === 'string') body.endDate = new Date(body.endDate);
+      const input = api.trips.update.input.parse(body);
       const updated = await storage.updateTrip(Number(req.params.id), input);
       res.json(updated);
     } catch (err) {
