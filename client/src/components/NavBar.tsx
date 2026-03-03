@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 function AnnaiLogo({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 190 56"
+      viewBox="0 0 44 56"
       className={className}
       xmlns="http://www.w3.org/2000/svg"
       aria-label="Annai"
@@ -18,34 +18,22 @@ function AnnaiLogo({ className }: { className?: string }) {
         </linearGradient>
       </defs>
 
-      <g transform="translate(22, 28)">
-        <polygon points="0,-25 -14,19 0,10" fill="#2D3748" />
-        <polygon points="0,-25 14,19 0,10" fill="url(#annai-arrow-g)" />
-
-        <text
-          x="0"
-          y="-4"
-          textAnchor="middle"
-          fontFamily="'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif"
-          fontSize="14"
-          fontWeight="800"
-          fill="#FFFFFF"
-        >
-          A
-        </text>
-      </g>
+      <line x1="22" y1="1" x2="22" y2="14" stroke="#2D3748" strokeWidth="2.5" strokeLinecap="round" />
 
       <text
-        x="44"
-        y="38"
+        x="22"
+        y="13"
+        textAnchor="middle"
         fontFamily="'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif"
-        fontSize="32"
-        fontWeight="700"
+        fontSize="15"
+        fontWeight="800"
         fill="#2D3748"
-        letterSpacing="-0.5"
       >
-        nnai
+        A
       </text>
+
+      <polygon points="22,16 4,54 22,44" fill="#2D3748" />
+      <polygon points="22,16 40,54 22,44" fill="none" stroke="url(#annai-arrow-g)" strokeWidth="2.2" strokeLinejoin="round" />
     </svg>
   );
 }
