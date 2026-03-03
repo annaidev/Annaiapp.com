@@ -10,7 +10,7 @@ export function NavBar() {
           className="flex items-center gap-2 text-primary hover:opacity-80 transition-opacity"
         >
           <img src={logo} alt="Annai Logo" className="h-10 w-10 object-contain" />
-          <span className="text-xl font-bold font-display tracking-tight text-foreground">Annai</span>
+          <span className="text-2xl font-bold font-display tracking-tight text-primary">Annai</span>
         </Link>
       </div>
     </header>
