@@ -159,7 +159,28 @@ export default function TripDashboard() {
                   </Link>
                 </div>
 
-                {/* New Safety Section */}
+                {/* Cultural Insights in Overview */}
+                <div className="bg-gradient-to-br from-accent/5 to-transparent rounded-3xl p-8 border border-accent/10">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 bg-accent/10 text-accent rounded-2xl">
+                      <Globe className="h-6 w-6" />
+                    </div>
+                    <h2 className="text-2xl font-bold">Cultural Insights</h2>
+                  </div>
+                  <p className="text-muted-foreground mb-6">Learn about local customs, etiquette, and essential tips for your destination.</p>
+                  <Button 
+                    onClick={() => {
+                      setActiveTab("ai");
+                      handleGetTips();
+                    }}
+                    variant="outline"
+                    className="rounded-xl border-accent/20 text-accent hover:bg-accent/5"
+                  >
+                    Get Cultural Tips
+                  </Button>
+                </div>
+
+                {/* Safety Section */}
                 <div className="bg-gradient-to-br from-destructive/5 to-transparent rounded-3xl p-8 border border-destructive/10">
                   <div className="flex items-center gap-3 mb-6">
                     <div className="p-3 bg-destructive/10 text-destructive rounded-2xl">
@@ -212,29 +233,37 @@ export default function TripDashboard() {
             >
               <div className="md:col-span-1 space-y-4">
                 <Button 
-                  onClick={handleGeneratePackList} 
-                  disabled={packMutation.isPending}
-                  className={`w-full justify-start h-16 px-6 rounded-2xl text-lg ${aiContent?.type === 'pack' ? 'bg-primary text-white shadow-lg' : 'bg-card text-foreground hover:bg-muted'}`}
-                >
-                  <Briefcase className="h-5 w-5 mr-3" /> 
-                  {packMutation.isPending ? "Generating..." : "Smart Packing List"}
-                </Button>
-                <Button 
-                  onClick={handleGetTips} 
-                  disabled={tipsMutation.isPending}
-                  className={`w-full justify-start h-16 px-6 rounded-2xl text-lg ${aiContent?.type === 'tips' ? 'bg-accent text-white shadow-lg' : 'bg-card text-foreground hover:bg-muted'}`}
-                >
-                  <Globe className="h-5 w-5 mr-3" /> 
-                  {tipsMutation.isPending ? "Gathering Tips..." : "Cultural Customs"}
-                </Button>
-                <Button 
                   onClick={handleGetSafety} 
                   disabled={safetyMutation.isPending}
                   className={`w-full justify-start h-16 px-6 rounded-2xl text-lg ${aiContent?.type === 'safety' ? 'bg-destructive text-white shadow-lg' : 'bg-card text-foreground hover:bg-muted'}`}
                 >
                   <ShieldAlert className="h-5 w-5 mr-3" /> 
-                  {safetyMutation.isPending ? "Analyzing..." : "Safety & Areas"}
+                  {safetyMutation.isPending ? "Analyzing..." : "Safety & Embassy Info"}
                 </Button>
+
+                <div className="pt-4 border-t border-border/50">
+                  <p className="text-xs text-muted-foreground px-2 mb-2 uppercase tracking-wider font-semibold">Other AI Tools</p>
+                  <div className="space-y-2">
+                    <Button 
+                      onClick={handleGeneratePackList} 
+                      disabled={packMutation.isPending}
+                      variant="ghost"
+                      className={`w-full justify-start h-12 px-4 rounded-xl ${aiContent?.type === 'pack' ? 'bg-primary/10 text-primary' : ''}`}
+                    >
+                      <Briefcase className="h-4 w-4 mr-3" /> 
+                      Smart Packing Suggestion
+                    </Button>
+                    <Button 
+                      onClick={handleGetTips} 
+                      disabled={tipsMutation.isPending}
+                      variant="ghost"
+                      className={`w-full justify-start h-12 px-4 rounded-xl ${aiContent?.type === 'tips' ? 'bg-accent/10 text-accent' : ''}`}
+                    >
+                      <Globe className="h-4 w-4 mr-3" /> 
+                      Cultural Etiquette
+                    </Button>
+                  </div>
+                </div>
               </div>
               
               <div className="md:col-span-2">
