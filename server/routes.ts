@@ -7,29 +7,17 @@ import { z } from "zod";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-const AI_MODELS = [
-  "qwen/qwen3-4b:free",
-  "qwen/qwen3-8b",
-];
+const AI_MODEL = "gpt-4o-mini";
 
 async function aiChat(messages: { role: string; content: string }[]): Promise<string> {
-  for (const model of AI_MODELS) {
-    try {
-      const response = await openai.chat.completions.create({
-        model,
-        messages: messages as any,
-      });
-      return response.choices[0]?.message?.content || "";
-    } catch (err: any) {
-      if (err?.status === 429 || err?.status === 503) continue;
-      throw err;
-    }
-  }
-  throw new Error("All AI models are unavailable");
+  const response = await openai.chat.completions.create({
+    model: AI_MODEL,
+    messages: messages as any,
+  });
+  return response.choices[0]?.message?.content || "";
 }
 
 function stripThinkTags(text: string): string {
