@@ -7,9 +7,43 @@ import { z } from "zod";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1",
 });
+
+const AI_MODELS = [
+  "qwen/qwen3-4b:free",
+  "qwen/qwen3-8b",
+];
+
+async function aiChat(messages: { role: string; content: string }[]): Promise<string> {
+  for (const model of AI_MODELS) {
+    try {
+      const response = await openai.chat.completions.create({
+        model,
+        messages: messages as any,
+      });
+      return response.choices[0]?.message?.content || "";
+    } catch (err: any) {
+      if (err?.status === 429 || err?.status === 503) continue;
+      throw err;
+    }
+  }
+  throw new Error("All AI models are unavailable");
+}
+
+function stripThinkTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+}
+
+function extractJson(text: string): string {
+  const cleaned = stripThinkTags(text);
+  const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) return fenceMatch[1].trim();
+  const braceMatch = cleaned.match(/(\{[\s\S]*\})/);
+  if (braceMatch) return braceMatch[1].trim();
+  return cleaned;
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -42,15 +76,9 @@ export async function registerRoutes(
         jackets/clothing based on typical weather, and must-have travel documents. 
         Return ONLY a JSON object with a single key 'items' containing an array of strings.`;
         
-        const aiResponse = await openai.chat.completions.create({
-          model: "gpt-5.1",
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-        });
-        
-        const content = aiResponse.choices[0]?.message?.content;
+        const content = await aiChat([{ role: "user", content: prompt }]);
         if (content) {
-          const { items } = JSON.parse(content);
+          const { items } = JSON.parse(extractJson(content));
           if (Array.isArray(items)) {
             for (const item of items) {
               await storage.createPackingList({
@@ -161,18 +189,12 @@ export async function registerRoutes(
     try {
       const { destination, days } = api.ai.generatePackingList.input.parse(req.body);
       
-      const prompt = `Generate a concise packing list for a trip to ${destination}${days ? ` for ${days} days` : ''}. Return ONLY a JSON object with a single key 'items' containing an array of strings.`;
+      const prompt = `Generate a concise packing list for a trip to ${destination}${days ? ` for ${days} days` : ''}. Return ONLY a JSON object with a single key 'items' containing an array of strings. No explanation, no markdown, just the JSON.`;
       
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-      });
-      
-      const content = response.choices[0]?.message?.content;
+      const content = await aiChat([{ role: "user", content: prompt }]);
       if (!content) throw new Error("No response from AI");
       
-      res.json(JSON.parse(content));
+      res.json(JSON.parse(extractJson(content)));
     } catch (error) {
       console.error("AI Packing List Error:", error);
       res.status(500).json({ message: "Failed to generate packing list" });
@@ -183,15 +205,11 @@ export async function registerRoutes(
     try {
       const { destination } = api.ai.culturalTips.input.parse(req.body);
       
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [
-          { role: "system", content: "You are a travel expert providing concise, actionable cultural customs and etiquette tips. Always respond in English. Format with markdown." },
-          { role: "user", content: `Give me 3-5 important cultural customs, tips, and etiquette advice for visiting ${destination}. Respond entirely in English.` }
-        ],
-      });
-      
-      const tips = response.choices[0]?.message?.content || "No tips available.";
+      const raw = await aiChat([
+        { role: "system", content: "You are a travel expert providing concise, actionable cultural customs and etiquette tips. Always respond in English. Format with markdown." },
+        { role: "user", content: `Give me 3-5 important cultural customs, tips, and etiquette advice for visiting ${destination}. Respond entirely in English.` }
+      ]);
+      const tips = stripThinkTags(raw || "No tips available.");
       res.json({ tips });
     } catch (error) {
       console.error("AI Cultural Tips Error:", error);
@@ -203,15 +221,11 @@ export async function registerRoutes(
     try {
       const { destination, citizenship } = api.ai.safetyAdvice.input.parse(req.body);
       
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [
-          { role: "system", content: "You are a travel safety and diplomatic expert. Provide concise advice on areas to avoid, common scams, and general safety. ALSO, if provided with a citizenship, find and include the location and contact information for the nearest embassy or consulate of that country in the destination. Always respond in English. Format with clear markdown headings." },
-          { role: "user", content: `What are the safety concerns and embassy information for a ${citizenship || "traveler"} visiting ${destination}? Respond entirely in English.` }
-        ],
-      });
-      
-      const advice = response.choices[0]?.message?.content || "No safety advice available.";
+      const raw = await aiChat([
+        { role: "system", content: "You are a travel safety and diplomatic expert. Provide concise advice on areas to avoid, common scams, and general safety. ALSO, if provided with a citizenship, find and include the location and contact information for the nearest embassy or consulate of that country in the destination. Always respond in English. Format with clear markdown headings." },
+        { role: "user", content: `What are the safety concerns and embassy information for a ${citizenship || "traveler"} visiting ${destination}? Respond entirely in English.` }
+      ]);
+      const advice = stripThinkTags(raw || "No safety advice available.");
       res.json({ advice });
     } catch (error) {
       console.error("AI Safety Advice Error:", error);
@@ -223,12 +237,10 @@ export async function registerRoutes(
     try {
       const { destination } = api.ai.safetyMap.input.parse(req.body);
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [
-          {
-            role: "system",
-            content: `You are a travel safety data analyst. Given a destination, return a JSON object with:
+      const content = await aiChat([
+        {
+          role: "system",
+          content: `You are a travel safety data analyst. Given a destination, return a JSON object with:
 1. "center": { "lat": number, "lng": number } — the geographic center of the destination city.
 2. "zones": an array of 6-10 notable areas/neighborhoods, each with:
    - "name": the area/neighborhood name
@@ -237,17 +249,13 @@ export async function registerRoutes(
    - "radius": radius in meters (300-1500)
    - "level": one of "safe", "caution", or "avoid"
    - "description": a brief one-sentence reason
-Include a mix of safe tourist areas, areas requiring caution, and areas travelers should avoid. Use real neighborhood names and accurate coordinates. All names and descriptions must be in English. Return ONLY valid JSON.`
-          },
-          { role: "user", content: `Provide safety zone data for ${destination}. Use English for all names and descriptions.` }
-        ],
-        response_format: { type: "json_object" },
-      });
-
-      const content = response.choices[0]?.message?.content;
+Include a mix of safe tourist areas, areas requiring caution, and areas travelers should avoid. Use real neighborhood names and accurate coordinates. All names and descriptions must be in English. Return ONLY the JSON object, no explanation, no markdown.`
+        },
+        { role: "user", content: `Provide safety zone data for ${destination}. Use English for all names and descriptions.` }
+      ]);
       if (!content) throw new Error("No response from AI");
 
-      res.json(JSON.parse(content));
+      res.json(JSON.parse(extractJson(content)));
     } catch (error) {
       console.error("AI Safety Map Error:", error);
       res.status(500).json({ message: "Failed to generate safety map data" });
@@ -344,14 +352,11 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
   app.post(api.ai.phrases.path, requireAuth, async (req, res) => {
     try {
       const { destination } = api.ai.phrases.input.parse(req.body);
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [
-          { role: "system", content: "You are a language guide for travelers. Provide 10-15 essential phrases travelers need at the destination. For each phrase, include the English meaning, the local language translation, and a phonetic pronunciation guide. Format clearly with markdown. Always respond in English with translations." },
-          { role: "user", content: `Give me essential travel phrases for visiting ${destination}. Include greetings, ordering food, asking for directions, emergencies, and common polite expressions. Respond in English with local language translations and pronunciation.` }
-        ],
-      });
-      const phrases = response.choices[0]?.message?.content || "No phrases available.";
+      const raw = await aiChat([
+        { role: "system", content: "You are a language guide for travelers. Provide 10-15 essential phrases travelers need at the destination. For each phrase, include the English meaning, the local language translation, and a phonetic pronunciation guide. Format clearly with markdown. Always respond in English with translations." },
+        { role: "user", content: `Give me essential travel phrases for visiting ${destination}. Include greetings, ordering food, asking for directions, emergencies, and common polite expressions. Respond in English with local language translations and pronunciation.` }
+      ]);
+      const phrases = stripThinkTags(raw || "No phrases available.");
       res.json({ phrases });
     } catch (error) {
       console.error("AI Phrases Error:", error);
@@ -363,14 +368,11 @@ Include a mix of safe tourist areas, areas requiring caution, and areas traveler
     try {
       const { destination, startDate, endDate } = api.ai.weather.input.parse(req.body);
       const dateRange = startDate && endDate ? `from ${startDate} to ${endDate}` : "for an upcoming trip";
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [
-          { role: "system", content: "You are a travel weather advisor. Provide a helpful weather forecast summary for the destination and time period. Include expected temperatures, rainfall, what to wear, and any weather-related travel tips. Always respond in English. Format with markdown." },
-          { role: "user", content: `What weather should a traveler expect in ${destination} ${dateRange}? Include temperature ranges, precipitation, clothing recommendations, and any weather warnings. Respond in English.` }
-        ],
-      });
-      const forecast = response.choices[0]?.message?.content || "No forecast available.";
+      const raw = await aiChat([
+        { role: "system", content: "You are a travel weather advisor. Provide a helpful weather forecast summary for the destination and time period. Include expected temperatures, rainfall, what to wear, and any weather-related travel tips. Always respond in English. Format with markdown." },
+        { role: "user", content: `What weather should a traveler expect in ${destination} ${dateRange}? Include temperature ranges, precipitation, clothing recommendations, and any weather warnings. Respond in English.` }
+      ]);
+      const forecast = stripThinkTags(raw || "No forecast available.");
       res.json({ forecast });
     } catch (error) {
       console.error("AI Weather Error:", error);
