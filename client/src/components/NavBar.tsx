@@ -6,62 +6,34 @@ import { Button } from "@/components/ui/button";
 function AnnaiLogo({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 160 48"
+      viewBox="0 0 44 68"
       className={className}
       xmlns="http://www.w3.org/2000/svg"
       aria-label="Annai"
     >
       <defs>
-        <linearGradient id="annai-globe-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#E05555" />
-          <stop offset="50%" stopColor="#F0A830" />
-          <stop offset="100%" stopColor="#5EC6C6" />
-        </linearGradient>
-        <linearGradient id="annai-arc-g" x1="0" y1="0" x2="1" y2="0">
+        <linearGradient id="annai-arrow-g" x1="0.5" y1="0" x2="0.5" y2="1">
           <stop offset="0%" stopColor="#E05555" />
           <stop offset="100%" stopColor="#F0A830" />
         </linearGradient>
-        <clipPath id="globe-clip">
-          <circle cx="24" cy="24" r="17" />
-        </clipPath>
       </defs>
 
-      <circle cx="24" cy="24" r="17" fill="none" stroke="url(#annai-globe-g)" strokeWidth="2.2" />
-
-      <g clipPath="url(#globe-clip)" stroke="#2D3748" strokeWidth="1.2" fill="none" opacity="0.35">
-        <ellipse cx="24" cy="24" rx="8" ry="17" />
-        <ellipse cx="24" cy="24" rx="14" ry="17" />
-        <line x1="7" y1="16" x2="41" y2="16" />
-        <line x1="7" y1="24" x2="41" y2="24" />
-        <line x1="7" y1="32" x2="41" y2="32" />
-      </g>
-
-      <path
-        d="M 8,32 Q 16,8 32,12 Q 44,15 40,30"
-        fill="none"
-        stroke="url(#annai-arc-g)"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeDasharray="2,3"
-      />
-
-      <g transform="translate(38,12) rotate(45)" fill="#E05555">
-        <path d="M 0,0 L -2.5,-1 L -6,0 L -2.5,1 Z" />
-        <path d="M -3,-3.5 L -3.5,0 L -3,0 Z" opacity="0.7" />
-        <path d="M -3,3.5 L -3.5,0 L -3,0 Z" opacity="0.7" />
-      </g>
-
       <text
-        x="52"
-        y="31"
+        x="22"
+        y="14"
+        textAnchor="middle"
         fontFamily="'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif"
-        fontSize="24"
-        fontWeight="700"
-        letterSpacing="-0.5"
+        fontSize="18"
+        fontWeight="800"
         fill="#2D3748"
       >
-        Annai
+        A
       </text>
+
+      <line x1="22" y1="17" x2="22" y2="26" stroke="#2D3748" strokeWidth="2.2" strokeLinecap="round" />
+
+      <polygon points="22,26 4,66 22,54" fill="#2D3748" />
+      <polygon points="22,26 40,66 22,54" fill="none" stroke="url(#annai-arrow-g)" strokeWidth="2.2" strokeLinejoin="round" />
     </svg>
   );
 }
