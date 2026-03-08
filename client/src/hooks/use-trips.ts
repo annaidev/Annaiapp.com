@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertTrip, type UpdateTripRequest } from "@shared/routes";
 import { useToast } from "@/hooks/use-toast";
-import type { TripsListResponse } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
+import type { TripResponse, TripsListResponse } from "@shared/schema";
 
 export function useTrips() {
   return useQuery({
@@ -22,36 +23,57 @@ export function useCreateTrip() {
 
   return useMutation({
     mutationFn: async (data: InsertTrip) => {
-      const res = await fetch(api.trips.create.path, {
-        method: api.trips.create.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to create trip");
+      const res = await apiRequest(api.trips.create.method, api.trips.create.path, data);
       return api.trips.create.responses[201].parse(await res.json());
     },
-    onSuccess: (createdTrip) => {
+    onMutate: async (draftTrip) => {
+      await queryClient.cancelQueries({ queryKey: [api.trips.list.path] });
+
+      const previousTrips = queryClient.getQueryData<TripsListResponse>([api.trips.list.path]);
+      const optimisticTrip: TripResponse = {
+        id: -Date.now(),
+        userId: null,
+        destination: draftTrip.destination,
+        startDate: draftTrip.startDate ?? null,
+        endDate: draftTrip.endDate ?? null,
+        notes: draftTrip.notes ?? null,
+        citizenship: draftTrip.citizenship ?? null,
+        createdAt: new Date(),
+      };
+
+      queryClient.setQueryData<TripsListResponse>(
+        [api.trips.list.path],
+        (currentTrips) => {
+          return currentTrips ? [optimisticTrip, ...currentTrips] : [optimisticTrip];
+        },
+      );
+
+      return { previousTrips, optimisticTripId: optimisticTrip.id };
+    },
+    onSuccess: async (createdTrip, _variables, context) => {
       queryClient.setQueryData<TripsListResponse | undefined>(
         [api.trips.list.path],
         (currentTrips) => {
-          if (!currentTrips) {
-            return [createdTrip];
-          }
-
-          const alreadyExists = currentTrips.some((trip) => trip.id === createdTrip.id);
-          if (alreadyExists) {
-            return currentTrips;
-          }
-
-          return [createdTrip, ...currentTrips];
+          const withoutOptimistic = (currentTrips ?? []).filter(
+            (trip) => trip.id !== context?.optimisticTripId,
+          );
+          const alreadyExists = withoutOptimistic.some((trip) => trip.id === createdTrip.id);
+          return alreadyExists ? withoutOptimistic : [createdTrip, ...withoutOptimistic];
         },
       );
-      queryClient.invalidateQueries({ queryKey: [api.trips.list.path] });
+      await queryClient.refetchQueries({ queryKey: [api.trips.list.path], type: "active" });
       toast({ title: "Trip created", description: "Your new adventure awaits!" });
     },
-    onError: (error) => {
+    onError: (error, _variables, context) => {
+      if (context?.previousTrips) {
+        queryClient.setQueryData([api.trips.list.path], context.previousTrips);
+      } else {
+        queryClient.removeQueries({ queryKey: [api.trips.list.path], exact: true });
+      }
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: [api.trips.list.path] });
     },
   });
 }
