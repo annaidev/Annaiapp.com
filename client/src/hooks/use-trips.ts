@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertTrip, type UpdateTripRequest } from "@shared/routes";
 import { useToast } from "@/hooks/use-toast";
+import type { TripsListResponse } from "@shared/schema";
 
 export function useTrips() {
   return useQuery({
@@ -30,7 +31,22 @@ export function useCreateTrip() {
       if (!res.ok) throw new Error("Failed to create trip");
       return api.trips.create.responses[201].parse(await res.json());
     },
-    onSuccess: () => {
+    onSuccess: (createdTrip) => {
+      queryClient.setQueryData<TripsListResponse | undefined>(
+        [api.trips.list.path],
+        (currentTrips) => {
+          if (!currentTrips) {
+            return [createdTrip];
+          }
+
+          const alreadyExists = currentTrips.some((trip) => trip.id === createdTrip.id);
+          if (alreadyExists) {
+            return currentTrips;
+          }
+
+          return [createdTrip, ...currentTrips];
+        },
+      );
       queryClient.invalidateQueries({ queryKey: [api.trips.list.path] });
       toast({ title: "Trip created", description: "Your new adventure awaits!" });
     },
