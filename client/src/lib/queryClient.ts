@@ -1,9 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 const FETCH_TIMEOUT_MS = 15000;
-const LOCAL_AUTH_KEY = "annai.localAuthUser";
-
-type LocalAuthUser = { id: number; username: string };
 
 export function apiUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
@@ -15,35 +12,6 @@ async function throwIfResNotOk(res: Response) {
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
-}
-
-function getLocalAuthUser(): LocalAuthUser | null {
-  try {
-    const raw = window.localStorage.getItem(LOCAL_AUTH_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (typeof parsed?.id === "number" && typeof parsed?.username === "string") {
-      return parsed;
-    }
-  } catch {
-    // Ignore malformed local storage state.
-  }
-  return null;
-}
-
-function setLocalAuthUser(user: LocalAuthUser) {
-  window.localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(user));
-}
-
-function clearLocalAuthUser() {
-  window.localStorage.removeItem(LOCAL_AUTH_KEY);
-}
-
-function jsonResponse(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
 }
 
 function isRetriableNetworkError(err: unknown): boolean {
@@ -89,42 +57,12 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  let res: Response;
-
-  try {
-    res = await fetchWithRetry(url, {
-      method,
-      headers: data ? { "Content-Type": "application/json" } : {},
-      body: data ? JSON.stringify(data) : undefined,
-      credentials: "include",
-    });
-  } catch (error) {
-    // Temporary offline fallback while backend connectivity is unstable.
-    if (method === "POST" && url === "/api/register") {
-      const username = (data as any)?.username;
-      if (typeof username === "string" && username.trim().length > 0) {
-        const user = { id: Date.now(), username: username.trim() };
-        setLocalAuthUser(user);
-        return jsonResponse(user, 201);
-      }
-    }
-
-    if (method === "POST" && url === "/api/login") {
-      const username = (data as any)?.username;
-      if (typeof username === "string" && username.trim().length > 0) {
-        const user = { id: Date.now(), username: username.trim() };
-        setLocalAuthUser(user);
-        return jsonResponse(user, 200);
-      }
-    }
-
-    if (method === "POST" && url === "/api/logout") {
-      clearLocalAuthUser();
-      return jsonResponse({ message: "Logged out" }, 200);
-    }
-
-    throw error;
-  }
+  const res = await fetchWithRetry(url, {
+    method,
+    headers: data ? { "Content-Type": "application/json" } : {},
+    body: data ? JSON.stringify(data) : undefined,
+    credentials: "include",
+  });
 
   await throwIfResNotOk(res);
   return res;
@@ -137,31 +75,16 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     let res: Response;
-    const path = queryKey.join("/") as string;
 
     try {
-      res = await fetchWithRetry(path, {
+      res = await fetchWithRetry(queryKey.join("/") as string, {
         credentials: "include",
       });
     } catch (error) {
-      if (path === "/api/user") {
-        const localUser = getLocalAuthUser();
-        if (localUser) {
-          return localUser as T;
-        }
-      }
-
       if (unauthorizedBehavior === "returnNull") {
         return null;
       }
       throw error;
-    }
-
-    if (path === "/api/user" && res.status === 401) {
-      const localUser = getLocalAuthUser();
-      if (localUser) {
-        return localUser as T;
-      }
     }
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

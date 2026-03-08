@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { requireAuth } from "./auth";
@@ -6,13 +6,28 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const openaiApiKey =
+  process.env.OPENAI_API_KEY ?? process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+const openai = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
 
 const AI_MODEL = "gpt-4o-mini";
 
+if (!openai) {
+  console.warn("OPENAI_API_KEY is not set. AI-powered endpoints are disabled.");
+}
+
+class AiUnavailableError extends Error {
+  constructor() {
+    super("AI service unavailable: OPENAI_API_KEY is not configured.");
+    this.name = "AiUnavailableError";
+  }
+}
+
 async function aiChat(messages: { role: string; content: string }[], jsonMode = false): Promise<string> {
+  if (!openai) {
+    throw new AiUnavailableError();
+  }
+
   const response = await openai.chat.completions.create({
     model: AI_MODEL,
     messages: messages as any,
@@ -33,6 +48,14 @@ function extractJson(text: string): string {
   const braceMatch = cleaned.match(/(\{[\s\S]*\})/);
   if (braceMatch) return braceMatch[1].trim();
   return cleaned;
+}
+
+function handleAiError(res: Response, fallbackMessage: string, error: unknown) {
+  console.error(fallbackMessage, error);
+  if (error instanceof AiUnavailableError) {
+    return res.status(503).json({ message: "AI features are temporarily unavailable." });
+  }
+  return res.status(500).json({ message: fallbackMessage });
 }
 
 export async function registerRoutes(
@@ -80,7 +103,11 @@ export async function registerRoutes(
           }
         }
       } catch (aiError) {
-        console.error("Failed to prefill packing list:", aiError);
+        if (aiError instanceof AiUnavailableError) {
+          console.warn("Skipping AI packing prefill because OPENAI_API_KEY is not configured.");
+        } else {
+          console.error("Failed to prefill packing list:", aiError);
+        }
       }
 
       res.status(201).json(trip);
@@ -186,8 +213,7 @@ export async function registerRoutes(
       
       res.json(JSON.parse(content));
     } catch (error) {
-      console.error("AI Packing List Error:", error);
-      res.status(500).json({ message: "Failed to generate packing list" });
+      return handleAiError(res, "Failed to generate packing list", error);
     }
   });
 
@@ -202,8 +228,7 @@ export async function registerRoutes(
       const tips = stripThinkTags(raw || "No tips available.");
       res.json({ tips });
     } catch (error) {
-      console.error("AI Cultural Tips Error:", error);
-      res.status(500).json({ message: "Failed to fetch cultural tips" });
+      return handleAiError(res, "Failed to fetch cultural tips", error);
     }
   });
 
@@ -218,8 +243,7 @@ export async function registerRoutes(
       const advice = stripThinkTags(raw || "No safety advice available.");
       res.json({ advice });
     } catch (error) {
-      console.error("AI Safety Advice Error:", error);
-      res.status(500).json({ message: "Failed to fetch safety advice" });
+      return handleAiError(res, "Failed to fetch safety advice", error);
     }
   });
 
@@ -241,8 +265,7 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
 
       res.json(JSON.parse(content));
     } catch (error) {
-      console.error("AI Safety Map Error:", error);
-      res.status(500).json({ message: "Failed to generate safety map data" });
+      return handleAiError(res, "Failed to generate safety map data", error);
     }
   });
 
@@ -343,8 +366,7 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
       const phrases = stripThinkTags(raw || "No phrases available.");
       res.json({ phrases });
     } catch (error) {
-      console.error("AI Phrases Error:", error);
-      res.status(500).json({ message: "Failed to generate phrases" });
+      return handleAiError(res, "Failed to generate phrases", error);
     }
   });
 
@@ -359,8 +381,7 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
       const forecast = stripThinkTags(raw || "No forecast available.");
       res.json({ forecast });
     } catch (error) {
-      console.error("AI Weather Error:", error);
-      res.status(500).json({ message: "Failed to generate weather forecast" });
+      return handleAiError(res, "Failed to generate weather forecast", error);
     }
   });
 

@@ -7,6 +7,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User } from "@shared/schema";
+import connectPg from "connect-pg-simple";
 
 const scryptAsync = promisify(scrypt);
 
@@ -31,9 +32,16 @@ declare global {
 
 export function setupAuth(app: Express) {
   const MemoryStore = createMemoryStore(session);
-  const sessionStore = new MemoryStore({
-    checkPeriod: 1000 * 60 * 60 * 24,
-  });
+  const PgStore = connectPg(session);
+  const sessionStore =
+    process.env.DATABASE_URL
+      ? new PgStore({
+          conString: process.env.DATABASE_URL,
+          createTableIfMissing: true,
+        })
+      : new MemoryStore({
+          checkPeriod: 1000 * 60 * 60 * 24,
+        });
 
   app.use(
     session({

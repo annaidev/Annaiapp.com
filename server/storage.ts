@@ -410,6 +410,4 @@ export class MemStorage implements IStorage {
   }
 }
 
-// Temporary: always use in-memory storage to avoid production request hangs
-// while managed database connectivity is being stabilized.
-export const storage: IStorage = new MemStorage();
+export const storage: IStorage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();
