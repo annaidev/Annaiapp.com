@@ -24,12 +24,12 @@ git push origin main
 - Build command: `npm run build`
 - Publish directory: `dist/public`
 3. Set environment variables in Netlify:
-- `VITE_API_BASE_URL=https://<your-main-backend-domain>`
 - `VITE_ANNAI_CAMPING_URL=https://camping.annaiapp.com`
-4. Add custom domain:
+4. Do not set `VITE_API_BASE_URL` for production. The site proxies `/api/*` via `netlify.toml`.
+5. Add custom domain:
 - `annaiapp.com`
 - `www.annaiapp.com` (optional)
-5. In your domain DNS provider:
+6. In your domain DNS provider:
 - Point Netlify DNS records as shown in Netlify domain setup.
 
 ## 3) Camping App GitHub Repo
@@ -65,6 +65,8 @@ After both deploys:
 - Main domain path redirect works:
   - `https://annaiapp.com/camping` -> `https://camping.annaiapp.com`
 - Camping nav shows `Annai App` button (reads `VITE_ANNAI_MAIN_APP_URL`).
+- Main API requests go through:
+  - `https://annaiapp.com/api/*` -> `https://annaiapp-com.onrender.com/api/*`
 
 ## 6) Smoke Check
 1. Open `https://annaiapp.com` and verify main app loads.

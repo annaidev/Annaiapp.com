@@ -1,11 +1,8 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
-
 export function apiUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return API_BASE_URL ? `${API_BASE_URL}${normalizedPath}` : normalizedPath;
+  return path.startsWith("/") ? path : `/${path}`;
 }
 
 async function throwIfResNotOk(res: Response) {
@@ -15,12 +12,37 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+function isRetriableNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const message = err.message.toLowerCase();
+  return message.includes("failed to fetch") || message.includes("networkerror");
+}
+
+async function fetchWithRetry(input: string, init: RequestInit, attempts = 3): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fetch(apiUrl(input), init);
+    } catch (err) {
+      lastError = err;
+      if (!isRetriableNetworkError(err) || attempt === attempts) {
+        throw err;
+      }
+      // Render free instances can take a few seconds to wake from cold start.
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+    }
+  }
+
+  throw lastError;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(apiUrl(url), {
+  const res = await fetchWithRetry(url, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
@@ -37,7 +59,7 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(apiUrl(queryKey.join("/") as string), {
+    const res = await fetchWithRetry(queryKey.join("/") as string, {
       credentials: "include",
     });
 
