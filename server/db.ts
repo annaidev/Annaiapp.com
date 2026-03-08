@@ -21,6 +21,19 @@ export async function ensureDatabaseSchema(): Promise<void> {
   }
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS "session" (
+      sid VARCHAR PRIMARY KEY,
+      sess JSON NOT NULL,
+      expire TIMESTAMP NOT NULL
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "IDX_session_expire"
+    ON "session" (expire);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,

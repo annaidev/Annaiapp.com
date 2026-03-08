@@ -37,7 +37,6 @@ export function setupAuth(app: Express) {
     process.env.DATABASE_URL
       ? new PgStore({
           conString: process.env.DATABASE_URL,
-          createTableIfMissing: true,
         })
       : new MemoryStore({
           checkPeriod: 1000 * 60 * 60 * 24,
