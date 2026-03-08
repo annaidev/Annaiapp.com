@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { ensureDatabaseSchema } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
@@ -22,8 +23,6 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
-
-setupAuth(app);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -63,6 +62,8 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await ensureDatabaseSchema();
+  setupAuth(app);
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
