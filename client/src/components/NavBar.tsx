@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { LogOut, User } from "lucide-react";
+import { LogOut, Tent, User } from "lucide-react";
 import { useUser, useLogout } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 
@@ -41,6 +41,7 @@ function AnnaiLogo({ className }: { className?: string }) {
 export function NavBar() {
   const { data: user } = useUser();
   const logoutMutation = useLogout();
+  const campingUrl = (import.meta.env.VITE_ANNAI_CAMPING_URL ?? "").trim();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b glass">
@@ -54,6 +55,19 @@ export function NavBar() {
 
         {user && (
           <div className="flex items-center gap-3">
+            {campingUrl && (
+              <Button asChild variant="outline" size="sm" className="rounded-xl">
+                <a
+                  href={campingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="button-open-camping-app"
+                >
+                  <Tent className="h-4 w-4 mr-1.5" />
+                  Camping
+                </a>
+              </Button>
+            )}
             <span className="text-sm text-muted-foreground flex items-center gap-1.5" data-testid="text-username">
               <User className="h-4 w-4" />
               {user.username}
