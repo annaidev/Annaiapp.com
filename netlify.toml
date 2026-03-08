@@ -3,6 +3,12 @@
   publish = "dist/public"
 
 [[redirects]]
+  from = "/api/*"
+  to = "https://annaiapp-com.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/camping"
   to = "https://camping.annaiapp.com"
   status = 301
