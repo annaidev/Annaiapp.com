@@ -2,6 +2,7 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
+import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
@@ -30,12 +31,17 @@ declare global {
 }
 
 export function setupAuth(app: Express) {
+  const MemoryStore = createMemoryStore(session);
   const PgStore = connectPg(session);
-
-  const sessionStore = new PgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: true,
-  });
+  const sessionStore =
+    process.env.DATABASE_URL
+      ? new PgStore({
+          conString: process.env.DATABASE_URL,
+          createTableIfMissing: true,
+        })
+      : new MemoryStore({
+          checkPeriod: 1000 * 60 * 60 * 24,
+        });
 
   app.use(
     session({

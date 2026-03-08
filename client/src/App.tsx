@@ -12,20 +12,12 @@ import PackingList from "@/pages/PackingList";
 import BudgetTracker from "@/pages/BudgetTracker";
 import DocumentVault from "@/pages/DocumentVault";
 import ItineraryBuilder from "@/pages/ItineraryBuilder";
-import { Loader2 } from "lucide-react";
 
 function Router() {
   const { data: user, isLoading } = useUser();
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!user) {
+  // Avoid blocking the whole app on slow backend wake-ups.
+  if (!user || isLoading) {
     return <AuthPage />;
   }
 
