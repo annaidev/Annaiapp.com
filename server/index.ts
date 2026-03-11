@@ -87,12 +87,18 @@ app.use((req, res, next) => {
   }
 
   const port = parseInt(process.env.PORT || "5000", 10);
+  const listenOptions: Parameters<typeof httpServer.listen>[0] = {
+    port,
+    host: "0.0.0.0",
+  };
+
+  // Windows does not support this flag in the same way as Linux hosts like Render.
+  if (process.platform !== "win32") {
+    listenOptions.reusePort = true;
+  }
+
   httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
+    listenOptions,
     () => {
       log(`serving on port ${port}`);
     },

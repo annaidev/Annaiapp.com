@@ -3,7 +3,7 @@ import { queryClient, apiRequest, getQueryFn } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
 
 export function useUser() {
-  return useQuery({
+  return useQuery<Pick<User, "id" | "username"> | null>({
     queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
     staleTime: Infinity,

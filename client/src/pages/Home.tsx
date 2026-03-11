@@ -7,8 +7,9 @@ import { useTrips, useDeleteTrip } from "@/hooks/use-trips";
 import { TripForm } from "@/components/TripForm";
 import { Button } from "@/components/ui/button";
 import { NavBar } from "@/components/NavBar";
+import { useI18n } from "@/lib/i18n";
 
-function getCountdown(startDate: string | null, endDate: string | null) {
+function getCountdown(startDate: Date | string | null, endDate: Date | string | null) {
   const now = new Date();
   if (!startDate) return null;
   const start = new Date(startDate);
@@ -33,6 +34,7 @@ export default function Home() {
   const { data: trips, isLoading } = useTrips();
   const deleteMutation = useDeleteTrip();
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const { t } = useI18n();
 
   const container = {
     hidden: { opacity: 0 },
@@ -51,10 +53,10 @@ export default function Home() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
           <div>
             <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-3" data-testid="text-page-title">
-              Your Upcoming Adventures
+              {t("home.title")}
             </h1>
             <p className="text-lg text-muted-foreground">
-              Plan, organize, and experience the world with Annai.
+              {t("home.subtitle")}
             </p>
           </div>
           <Button 
@@ -64,7 +66,7 @@ export default function Home() {
             data-testid="button-new-trip"
           >
             <Plus className="mr-2 h-5 w-5" />
-            Plan New Trip
+            {t("home.newTrip")}
           </Button>
         </div>
 
@@ -75,26 +77,28 @@ export default function Home() {
             ))}
           </div>
         ) : !trips?.length ? (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="text-center py-24 px-6 bg-card rounded-3xl border border-dashed border-border shadow-sm"
-          >
-            <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-              <MapPin className="h-10 w-10 text-primary" />
-            </div>
-            <h2 className="text-2xl font-bold text-foreground mb-3">No trips planned yet</h2>
-            <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-              Ready for a getaway? Start planning your next dream vacation.
-            </p>
-            <Button 
-              onClick={() => setIsFormOpen(true)}
-              variant="outline"
-              className="rounded-xl border-primary text-primary hover:bg-primary/5"
+          <div className="space-y-6">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-center py-24 px-6 bg-card rounded-3xl border border-dashed border-border shadow-sm"
             >
-              <Plus className="mr-2 h-4 w-4" /> Create First Trip
-            </Button>
-          </motion.div>
+              <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                <MapPin className="h-10 w-10 text-primary" />
+              </div>
+              <h2 className="text-2xl font-bold text-foreground mb-3">{t("home.emptyTitle")}</h2>
+              <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                {t("home.emptyBody")}
+              </p>
+              <Button
+                onClick={() => setIsFormOpen(true)}
+                variant="outline"
+                className="rounded-xl border-primary text-primary hover:bg-primary/5"
+              >
+                <Plus className="mr-2 h-4 w-4" /> {t("home.createFirst")}
+              </Button>
+            </motion.div>
+          </div>
         ) : (
           <motion.div 
             variants={container}
@@ -158,7 +162,7 @@ export default function Home() {
                         )}
                         
                         <div className="flex items-center text-sm font-semibold text-white/90">
-                          View Details
+                          {t("home.viewDetails")}
                           <span className="ml-2 transform group-hover:translate-x-1 transition-transform">→</span>
                         </div>
                       </div>

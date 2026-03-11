@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Loader2, Globe, MapPin, Plane, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useI18n } from "@/lib/i18n";
 import {
   Select,
   SelectContent,
@@ -26,6 +27,7 @@ const SECURITY_QUESTIONS = [
 type AuthView = "login" | "register" | "forgot-username" | "forgot-answer" | "forgot-reset";
 
 export default function AuthPage() {
+  const { t, language, setLanguage, languageOptions } = useI18n();
   const [view, setView] = useState<AuthView>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -180,19 +182,33 @@ export default function AuthPage() {
     <div className="min-h-screen bg-background flex">
       <div className="flex-1 flex items-center justify-center p-8">
         <Card className="w-full max-w-md p-8 rounded-3xl shadow-xl border border-border/50">
+          <div className="mb-6">
+            <Select value={language} onValueChange={(value) => setLanguage(value as typeof language)}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {languageOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex items-center gap-3 mb-8">
             <div className="p-3 bg-primary/10 rounded-2xl">
               <Globe className="h-8 w-8 text-primary" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground" data-testid="text-auth-title">
-                {view === "login" && "Welcome to Annai"}
-                {view === "register" && "Create Account"}
-                {(view === "forgot-username" || view === "forgot-answer" || view === "forgot-reset") && "Reset Password"}
+                {view === "login" && t("auth.welcome")}
+                {view === "register" && t("auth.create")}
+                {(view === "forgot-username" || view === "forgot-answer" || view === "forgot-reset") && t("auth.reset")}
               </h1>
               <p className="text-sm text-muted-foreground">
-                {view === "login" && "Sign in to your travel companion"}
-                {view === "register" && "Set up your travel account"}
+                {view === "login" && t("auth.signInBody")}
+                {view === "register" && t("auth.createBody")}
                 {view === "forgot-username" && "Enter your username to begin"}
                 {view === "forgot-answer" && "Answer your security question"}
                 {view === "forgot-reset" && "Choose a new password"}
@@ -203,7 +219,7 @@ export default function AuthPage() {
           {(view === "login" || view === "register") && (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-1.5">Username</label>
+                <label className="block text-sm font-medium text-muted-foreground mb-1.5">{t("auth.username")}</label>
                 <Input
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -214,7 +230,7 @@ export default function AuthPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-1.5">Password</label>
+                <label className="block text-sm font-medium text-muted-foreground mb-1.5">{t("auth.password")}</label>
                 {renderPasswordInput(
                   password,
                   setPassword,
@@ -229,7 +245,7 @@ export default function AuthPage() {
               {view === "register" && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-muted-foreground mb-1.5">Security Question</label>
+                    <label className="block text-sm font-medium text-muted-foreground mb-1.5">{t("auth.securityQuestion")}</label>
                     <Select value={securityQuestion} onValueChange={setSecurityQuestion}>
                       <SelectTrigger className="rounded-xl h-12" data-testid="select-security-question">
                         <SelectValue placeholder="Choose a security question" />
@@ -242,7 +258,7 @@ export default function AuthPage() {
                     </Select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-muted-foreground mb-1.5">Security Answer</label>
+                    <label className="block text-sm font-medium text-muted-foreground mb-1.5">{t("auth.securityAnswer")}</label>
                     <Input
                       value={securityAnswer}
                       onChange={(e) => setSecurityAnswer(e.target.value)}
@@ -261,7 +277,7 @@ export default function AuthPage() {
                 data-testid="button-submit-auth"
               >
                 {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {view === "login" ? "Sign In" : "Create Account"}
+                {view === "login" ? t("auth.signIn") : t("auth.createAccount")}
               </Button>
             </form>
           )}

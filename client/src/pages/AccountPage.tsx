@@ -1,0 +1,231 @@
+import { useEffect, useState } from "react";
+import { Link } from "wouter";
+import { Crown, Globe2, Gift, ShieldCheck, User } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { NavBar } from "@/components/NavBar";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useUser } from "@/hooks/use-auth";
+import { useSubscriptionState } from "@/hooks/use-entitlements";
+import { useProfile, useUpdateProfile } from "@/hooks/use-profile";
+import { useI18n } from "@/lib/i18n";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { api } from "@shared/routes";
+
+export default function AccountPage() {
+  const { data: user } = useUser();
+  const { data } = useSubscriptionState(Boolean(user));
+  const { data: profile } = useProfile(Boolean(user));
+  const updateProfile = useUpdateProfile();
+  const entitlements = data?.entitlements;
+  const { t, languageOptions, language, setLanguage } = useI18n();
+  const { toast } = useToast();
+  const [homeCurrency, setHomeCurrency] = useState("USD");
+  const [couponCode, setCouponCode] = useState("");
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (profile?.homeCurrency) {
+      setHomeCurrency(profile.homeCurrency);
+    }
+  }, [profile?.homeCurrency]);
+
+  const saveProfile = () => {
+    updateProfile.mutate(
+      {
+        preferredLanguage: language,
+        homeCurrency: homeCurrency.toUpperCase(),
+      },
+      {
+        onSuccess: () => {
+          toast({ title: "Profile updated", description: "Your travel preferences have been saved." });
+        },
+        onError: (error) => {
+          toast({
+            title: "Unable to update profile",
+            description: error instanceof Error ? error.message : "Profile update failed.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
+
+  const redeemCouponMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest(api.coupons.redeem.method, api.coupons.redeem.path, { code: couponCode });
+      return res.json() as Promise<{ expiresAt: string }>;
+    },
+    onSuccess: async (data) => {
+      setCouponCode("");
+      await queryClient.invalidateQueries({ queryKey: ["/api/entitlements/me"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/subscription/me"] });
+      toast({
+        title: "Gift code redeemed",
+        description: `Annai Pro is active until ${new Date(data.expiresAt).toLocaleDateString()}.`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Unable to redeem code",
+        description: error instanceof Error ? error.message.split(":").slice(1).join(":").trim() || error.message : "Coupon redemption failed.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <div className="min-h-screen bg-background">
+      <NavBar />
+
+      <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-foreground">{t("account.title")}</h1>
+          <p className="mt-2 text-muted-foreground">{t("account.subtitle")}</p>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <Card className="rounded-[2rem] border p-8 shadow-sm">
+            <div className="mb-6 flex flex-wrap items-center gap-3">
+              <Badge variant="outline" className="rounded-full px-3 py-1">
+                <User className="mr-1.5 h-3.5 w-3.5" />
+                {user?.username ?? "Annai user"}
+              </Badge>
+              <Badge variant={entitlements?.hasProAccess ? "default" : "secondary"} className="rounded-full px-3 py-1">
+                <Crown className="mr-1.5 h-3.5 w-3.5" />
+                {entitlements?.hasProAccess ? t("plan.pro") : t("plan.free")}
+              </Badge>
+              <Badge variant="outline" className="rounded-full px-3 py-1">
+                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                Store-ready entitlements
+              </Badge>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl bg-muted/40 p-4">
+                <p className="text-sm text-muted-foreground">{t("account.plan")}</p>
+                <p className="mt-1 text-lg font-semibold text-foreground">
+                  {entitlements?.plan === "pro" ? t("plan.pro") : t("plan.free")}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">{entitlements?.summary.detail}</p>
+              </div>
+
+              <div className="rounded-2xl bg-muted/40 p-4">
+                <p className="text-sm text-muted-foreground">{t("account.subscription")}</p>
+                <p className="mt-1 text-lg font-semibold text-foreground">{data?.subscription?.status ?? "inactive"}</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {data?.subscription?.productId ?? "No product linked yet"}
+                  {data?.subscription?.expiresAt ? ` • ${new Date(data.subscription.expiresAt).toLocaleDateString()}` : ""}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-muted/40 p-4 md:col-span-2">
+                <p className="text-sm text-muted-foreground">{t("account.features")}</p>
+                <p className="mt-2 text-sm text-foreground">
+                  {(entitlements?.enabledFeatures ?? []).join(", ") || "No feature state loaded"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Button asChild className="rounded-2xl" data-testid="button-account-home">
+                <Link href="/">{t("account.openPlanner")}</Link>
+              </Button>
+              {!entitlements?.hasProAccess && (
+                <Button asChild variant="outline" className="rounded-2xl" data-testid="button-account-pricing">
+                  <Link href="/pricing">{t("account.upgrade")}</Link>
+                </Button>
+              )}
+            </div>
+          </Card>
+
+          <div className="space-y-6">
+            <Card className="rounded-[2rem] border p-8 shadow-sm">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+                  <Globe2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">{t("account.profile")}</h2>
+                  <p className="text-sm text-muted-foreground">Keep the app and AI output aligned to your traveler preferences.</p>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">{t("account.language")}</label>
+                  <Select value={language} onValueChange={(value) => setLanguage(value as typeof language)}>
+                    <SelectTrigger className="rounded-2xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {languageOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">{t("account.currency")}</label>
+                  <Input
+                    value={homeCurrency}
+                    onChange={(event) => setHomeCurrency(event.target.value.toUpperCase().slice(0, 3))}
+                    className="rounded-2xl"
+                    placeholder="USD"
+                    maxLength={3}
+                  />
+                </div>
+
+                <Button
+                  className="w-full rounded-2xl"
+                  onClick={saveProfile}
+                  disabled={updateProfile.isPending}
+                  data-testid="button-save-profile"
+                >
+                  {updateProfile.isPending ? "Saving..." : t("account.saveProfile")}
+                </Button>
+              </div>
+            </Card>
+
+            <Card className="rounded-[2rem] border p-8 shadow-sm">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+                  <Gift className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">Redeem Gift Code</h2>
+                  <p className="text-sm text-muted-foreground">Use a one-time family or tester code to unlock 30 days of Annai Pro.</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <Input
+                  value={couponCode}
+                  onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                  className="rounded-2xl"
+                  placeholder="Enter coupon code"
+                  data-testid="input-coupon-code"
+                />
+                <Button
+                  className="w-full rounded-2xl"
+                  disabled={redeemCouponMutation.isPending || !couponCode.trim()}
+                  onClick={() => redeemCouponMutation.mutate()}
+                  data-testid="button-redeem-coupon"
+                >
+                  {redeemCouponMutation.isPending ? "Redeeming..." : "Redeem Code"}
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

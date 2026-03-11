@@ -17,13 +17,18 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient as qc } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { insertBudgetItemSchema } from "@shared/schema";
 import type { BudgetItem } from "@shared/schema";
+import { useI18n } from "@/lib/i18n";
+import { api, buildUrl } from "@shared/routes";
 
 const CATEGORIES = [
   { value: "food", label: "Food & Dining", icon: Utensils, color: "hsl(4, 80%, 64%)" },
   { value: "transport", label: "Transport", icon: Car, color: "hsl(174, 60%, 42%)" },
+  { value: "metro", label: "Metro & Rail", icon: Car, color: "hsl(195, 70%, 45%)" },
+  { value: "rental_car", label: "Rental Car", icon: Car, color: "hsl(32, 90%, 55%)" },
+  { value: "rideshare", label: "Rideshare", icon: Car, color: "hsl(142, 60%, 40%)" },
   { value: "lodging", label: "Lodging", icon: Building2, color: "hsl(38, 95%, 60%)" },
   { value: "activities", label: "Activities", icon: Ticket, color: "hsl(262, 60%, 58%)" },
   { value: "shopping", label: "Shopping", icon: ShoppingBag, color: "hsl(330, 65%, 55%)" },
@@ -34,8 +39,8 @@ function getCategoryInfo(value: string) {
   return CATEGORIES.find(c => c.value === value) || CATEGORIES[CATEGORIES.length - 1];
 }
 
-function formatCurrency(cents: number, currency: string = "USD") {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
+function formatCurrency(cents: number, currency: string = "USD", locale = "en-US") {
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(cents / 100);
 }
 
 const formSchema = insertBudgetItemSchema.omit({ tripId: true }).extend({
@@ -52,11 +57,14 @@ export default function BudgetTracker() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
+  const { t, language } = useI18n();
+  const locale = language === "es" ? "es-ES" : language === "zh" ? "zh-CN" : language === "ja" ? "ja-JP" : language === "ko" ? "ko-KR" : "en-US";
 
   const { data: budgetItems = [], isLoading: itemsLoading } = useQuery<BudgetItem[]>({
-    queryKey: ['/api/trips', tripId, 'budget-items'],
+    queryKey: [api.budgetItems.listByTrip.path, tripId],
     queryFn: async () => {
-      const res = await fetch(`/api/trips/${tripId}/budget-items`, { credentials: "include" });
+      const url = buildUrl(api.budgetItems.listByTrip.path, { tripId });
+      const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch budget items");
       return res.json();
     },
@@ -80,7 +88,7 @@ export default function BudgetTracker() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/trips', tripId, 'budget-items'] });
+      queryClient.invalidateQueries({ queryKey: [api.budgetItems.listByTrip.path, tripId] });
       form.reset({ description: "", amount: "", category: "food", currency: "USD" });
       setShowForm(false);
       toast({ title: "Expense added", description: "Your expense has been recorded." });
@@ -95,7 +103,7 @@ export default function BudgetTracker() {
       await apiRequest("DELETE", `/api/budget-items/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/trips', tripId, 'budget-items'] });
+      queryClient.invalidateQueries({ queryKey: [api.budgetItems.listByTrip.path, tripId] });
       toast({ title: "Expense deleted" });
     },
   });
@@ -138,7 +146,7 @@ export default function BudgetTracker() {
         <div className="flex flex-row items-start justify-between gap-4 flex-wrap mb-8">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2" data-testid="text-budget-title">
-              Budget Tracker
+              {t("budget.title")}
             </h1>
             <p className="text-muted-foreground text-lg">{trip.destination}</p>
           </div>
@@ -147,7 +155,7 @@ export default function BudgetTracker() {
             className="rounded-xl"
             data-testid="button-add-expense"
           >
-            <Plus className="h-4 w-4 mr-2" /> Add Expense
+            <Plus className="h-4 w-4 mr-2" /> {t("budget.add")}
           </Button>
         </div>
 
@@ -167,7 +175,7 @@ export default function BudgetTracker() {
                       name="description"
                       render={({ field }) => (
                         <FormItem className="sm:col-span-2">
-                          <FormLabel>Description</FormLabel>
+                          <FormLabel>{t("budget.description")}</FormLabel>
                           <FormControl>
                             <Input placeholder="e.g. Dinner at local restaurant" {...field} data-testid="input-expense-description" />
                           </FormControl>
@@ -179,7 +187,7 @@ export default function BudgetTracker() {
                       name="amount"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Amount</FormLabel>
+                          <FormLabel>{t("budget.amount")}</FormLabel>
                           <FormControl>
                             <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} data-testid="input-expense-amount" />
                           </FormControl>
@@ -191,7 +199,7 @@ export default function BudgetTracker() {
                       name="category"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Category</FormLabel>
+                          <FormLabel>{t("budget.category")}</FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger data-testid="select-expense-category">
@@ -211,10 +219,10 @@ export default function BudgetTracker() {
                     />
                     <div className="sm:col-span-2 flex justify-end gap-2 flex-wrap">
                       <Button type="button" variant="ghost" onClick={() => setShowForm(false)} data-testid="button-cancel-expense">
-                        Cancel
+                        {t("budget.cancel")}
                       </Button>
                       <Button type="submit" disabled={createMutation.isPending} data-testid="button-save-expense">
-                        {createMutation.isPending ? "Saving..." : "Save Expense"}
+                        {createMutation.isPending ? "Saving..." : t("budget.save")}
                       </Button>
                     </div>
                   </form>
@@ -229,10 +237,10 @@ export default function BudgetTracker() {
             <div className="p-2 bg-primary/10 rounded-xl text-primary">
               <DollarSign className="h-5 w-5" />
             </div>
-            <span className="text-muted-foreground font-medium">Total Spent</span>
+            <span className="text-muted-foreground font-medium">{t("budget.total")}</span>
           </div>
           <p className="text-4xl font-bold text-foreground" data-testid="text-total-spent">
-            {formatCurrency(totalCents)}
+            {formatCurrency(totalCents, budgetItems[0]?.currency || "USD", locale)}
           </p>
           <p className="text-sm text-muted-foreground mt-1">{budgetItems.length} expense{budgetItems.length !== 1 ? "s" : ""} recorded</p>
         </Card>
@@ -243,7 +251,7 @@ export default function BudgetTracker() {
               <div className="p-2 bg-accent/10 rounded-xl text-accent">
                 <TrendingUp className="h-5 w-5" />
               </div>
-              <h2 className="text-xl font-bold">Spending by Category</h2>
+              <h2 className="text-xl font-bold">{t("budget.byCategory")}</h2>
             </div>
 
             <div className="space-y-4">
@@ -260,7 +268,7 @@ export default function BudgetTracker() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground">{percentage}%</span>
-                        <span className="font-semibold text-sm">{formatCurrency(cat.total)}</span>
+                        <span className="font-semibold text-sm">{formatCurrency(cat.total, budgetItems[0]?.currency || "USD", locale)}</span>
                       </div>
                     </div>
                     <div className="w-full h-3 bg-muted rounded-full overflow-hidden">
@@ -297,12 +305,12 @@ export default function BudgetTracker() {
         )}
 
         <div className="space-y-3">
-          <h2 className="text-xl font-bold mb-4">All Expenses</h2>
+          <h2 className="text-xl font-bold mb-4">{t("budget.all")}</h2>
           {budgetItems.length === 0 ? (
             <Card className="p-8 rounded-2xl text-center">
               <DollarSign className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-muted-foreground font-medium" data-testid="text-no-expenses">No expenses yet</p>
-              <p className="text-sm text-muted-foreground/70 mt-1">Add your first expense to start tracking your budget.</p>
+              <p className="text-muted-foreground font-medium" data-testid="text-no-expenses">{t("budget.emptyTitle")}</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">{t("budget.emptyBody")}</p>
             </Card>
           ) : (
             budgetItems.map((item) => {
@@ -332,7 +340,7 @@ export default function BudgetTracker() {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="font-semibold text-foreground" data-testid={`text-expense-amount-${item.id}`}>
-                          {formatCurrency(item.amount, item.currency || "USD")}
+                          {formatCurrency(item.amount, item.currency || "USD", locale)}
                         </span>
                         <Button
                           size="icon"

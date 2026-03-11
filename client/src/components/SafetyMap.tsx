@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { MapPin, Shield, AlertTriangle, XCircle, Loader2, Map } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSafetyMap } from "@/hooks/use-ai";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -38,8 +39,13 @@ export function SafetyMap({ destination }: { destination: string }) {
   const [mapData, setMapData] = useState<SafetyMapData | null>(null);
   const [selectedZone, setSelectedZone] = useState<SafetyZone | null>(null);
   const [filter, setFilter] = useState<"all" | "safe" | "caution" | "avoid">("all");
+  const { data: entitlements } = useEntitlements(true);
 
   const handleLoadMap = () => {
+    if (!entitlements?.enabledFeatures.includes("google_maps")) {
+      window.location.href = "/pricing";
+      return;
+    }
     safetyMapMutation.mutate(destination, {
       onSuccess: (data) => setMapData(data),
     });
@@ -121,7 +127,7 @@ export function SafetyMap({ destination }: { destination: string }) {
           className="rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground"
           data-testid="button-load-map"
         >
-          <MapPin className="h-4 w-4 mr-2" /> Generate Safety Map
+          <MapPin className="h-4 w-4 mr-2" /> {entitlements?.enabledFeatures.includes("google_maps") ? "Generate Safety Map" : "Unlock Safety Map"}
         </Button>
       </div>
     );

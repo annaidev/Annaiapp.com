@@ -1,7 +1,10 @@
 import { Link } from "wouter";
-import { LogOut, Tent, User } from "lucide-react";
+import { Crown, LogOut, User } from "lucide-react";
 import { useUser, useLogout } from "@/hooks/use-auth";
+import { useProStatus } from "@/hooks/use-pro-status";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useI18n } from "@/lib/i18n";
 
 function AnnaiLogo({ className }: { className?: string }) {
   return (
@@ -41,7 +44,8 @@ function AnnaiLogo({ className }: { className?: string }) {
 export function NavBar() {
   const { data: user } = useUser();
   const logoutMutation = useLogout();
-  const campingUrl = (import.meta.env.VITE_ANNAI_CAMPING_URL ?? "").trim();
+  const { data: proStatus } = useProStatus(Boolean(user));
+  const { t } = useI18n();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b glass">
@@ -55,23 +59,26 @@ export function NavBar() {
 
         {user && (
           <div className="flex items-center gap-3">
-            {campingUrl && (
-              <Button asChild variant="outline" size="sm" className="rounded-xl">
-                <a
-                  href={campingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="button-open-camping-app"
-                >
-                  <Tent className="h-4 w-4 mr-1.5" />
-                  Camping
-                </a>
+            {proStatus && (
+              <Badge
+                variant={proStatus.hasProAccess ? "default" : "secondary"}
+                className="rounded-full px-3 py-1 text-xs font-semibold"
+              >
+                <Crown className="mr-1 h-3.5 w-3.5" />
+                {proStatus.hasProAccess ? t("plan.pro") : t("plan.free")}
+              </Badge>
+            )}
+            {!proStatus?.hasProAccess && (
+              <Button asChild variant="outline" size="sm" className="rounded-xl" data-testid="button-upgrade-nav">
+                <Link href="/pricing">{t("nav.upgrade")}</Link>
               </Button>
             )}
-            <span className="text-sm text-muted-foreground flex items-center gap-1.5" data-testid="text-username">
-              <User className="h-4 w-4" />
-              {user.username}
-            </span>
+            <Button asChild variant="ghost" size="sm" className="text-muted-foreground rounded-xl" data-testid="button-account">
+              <Link href="/account">
+                <User className="h-4 w-4 mr-1.5" />
+                {t("nav.account")}
+              </Link>
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -80,7 +87,7 @@ export function NavBar() {
               data-testid="button-logout"
             >
               <LogOut className="h-4 w-4 mr-1.5" />
-              Sign Out
+              {t("nav.signOut")}
             </Button>
           </div>
         )}

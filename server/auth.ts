@@ -3,13 +3,14 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import createMemoryStore from "memorystore";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
+import { createHmac, scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import { User } from "@shared/schema";
+import type { User as AppUser } from "@shared/schema";
 import connectPg from "connect-pg-simple";
 
 const scryptAsync = promisify(scrypt);
+const ECOSYSTEM_SSO_TOKEN_TTL_SECONDS = 60;
 
 async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
@@ -24,9 +25,68 @@ async function comparePasswords(supplied: string, stored: string): Promise<boole
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
+type AnnaiSsoPayload = {
+  iss: "annai-camping";
+  aud: "annai-travel";
+  sub: string;
+  username: string;
+  iat: number;
+  exp: number;
+  nonce: string;
+  v: 1;
+};
+
+function getAnnaiSsoSecret(): string | undefined {
+  const explicitSecret = process.env.ANNAI_SSO_SHARED_SECRET?.trim();
+  if (explicitSecret) return explicitSecret;
+  if (process.env.NODE_ENV !== "production") {
+    return "annai-local-sso-secret";
+  }
+  return undefined;
+}
+
+function signAnnaiSsoPayload(encodedPayload: string, secret: string): Buffer {
+  return createHmac("sha256", secret).update(encodedPayload).digest();
+}
+
+function verifyAnnaiSsoToken(token: string): AnnaiSsoPayload | undefined {
+  const secret = getAnnaiSsoSecret();
+  if (!secret) return undefined;
+
+  const parts = token.split(".");
+  if (parts.length !== 2) return undefined;
+  const [encodedPayload, providedSignatureBase64] = parts;
+  if (!encodedPayload || !providedSignatureBase64) return undefined;
+
+  let providedSignature: Buffer;
+  try {
+    providedSignature = Buffer.from(providedSignatureBase64, "base64url");
+  } catch {
+    return undefined;
+  }
+
+  const expectedSignature = signAnnaiSsoPayload(encodedPayload, secret);
+  if (providedSignature.length !== expectedSignature.length) return undefined;
+  if (!timingSafeEqual(providedSignature, expectedSignature)) return undefined;
+
+  let payload: AnnaiSsoPayload;
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as AnnaiSsoPayload;
+  } catch {
+    return undefined;
+  }
+
+  if (!payload || payload.v !== 1) return undefined;
+  if (payload.iss !== "annai-camping" || payload.aud !== "annai-travel") return undefined;
+  if (typeof payload.sub !== "string" || !payload.sub) return undefined;
+  if (typeof payload.username !== "string" || !payload.username) return undefined;
+  if (typeof payload.exp !== "number" || payload.exp <= Math.floor(Date.now() / 1000)) return undefined;
+  return payload;
+}
+
 declare global {
   namespace Express {
-    interface User extends import("@shared/schema").User {}
+    interface User extends AppUser {}
   }
 }
 
@@ -167,7 +227,7 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req: Request, res: Response, next: NextFunction) => {
-    passport.authenticate("local", (err: any, user: User | false, info: any) => {
+    passport.authenticate("local", (err: any, user: AppUser | false, info: any) => {
       if (err) return next(err);
       if (!user) return res.status(401).json({ message: info?.message || "Login failed" });
       req.login(user, (err) => {
@@ -175,6 +235,45 @@ export function setupAuth(app: Express) {
         return res.json({ id: user.id, username: user.username });
       });
     })(req, res, next);
+  });
+
+  app.post("/api/auth/annai/exchange", async (req: Request, res: Response) => {
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    if (!token) {
+      return res.status(400).json({ message: "Annai handoff token is required" });
+    }
+
+    const payload = verifyAnnaiSsoToken(token);
+    if (!payload) {
+      return res.status(401).json({ message: "Invalid or expired Annai handoff token" });
+    }
+
+    let user = await storage.getUserByAnnaiUserId(payload.sub);
+    if (!user) {
+      const usernameConflict = await storage.getUserByUsername(payload.username);
+      if (usernameConflict && usernameConflict.annaiUserId !== payload.sub) {
+        return res.status(409).json({
+          message: "A Travel account with this username already exists and must be linked manually.",
+        });
+      }
+
+      if (usernameConflict) {
+        user = await storage.setUserAnnaiUserId(usernameConflict.id, payload.sub);
+      } else {
+        user = await storage.createUser({
+          annaiUserId: payload.sub,
+          username: payload.username,
+          password: await hashPassword(randomBytes(24).toString("hex")),
+          securityQuestion: null,
+          securityAnswer: null,
+        });
+      }
+    }
+
+    req.login(user, (err) => {
+      if (err) return res.status(500).json({ message: "Travel login failed after Annai exchange" });
+      return res.json({ id: user.id, username: user.username });
+    });
   });
 
   app.post("/api/logout", (req: Request, res: Response) => {

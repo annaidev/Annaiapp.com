@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { addDays, differenceInDays, format } from "date-fns";
 import {
   ArrowLeft, CalendarDays, Plus, Trash2, Clock,
-  MapPin, Utensils, Car, Camera, Loader2
+  MapPin, Utensils, Car, Camera, Loader2, Pencil, Save, X
 } from "lucide-react";
 import { useTrip } from "@/hooks/use-trips";
 import { useToast } from "@/hooks/use-toast";
@@ -81,12 +81,50 @@ export default function ItineraryBuilder() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async (data: {
+      id: number;
+      dayNumber: number;
+      timeSlot: string;
+      title: string;
+      description: string;
+      category: string;
+    }) => {
+      const url = buildUrl(api.itineraryItems.update.path, { id: data.id });
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dayNumber: data.dayNumber,
+          timeSlot: data.timeSlot,
+          title: data.title,
+          description: data.description,
+          category: data.category,
+        }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to update item");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.itineraryItems.listByTrip.path, tripId] });
+      toast({ title: "Updated", description: "Itinerary item saved." });
+      setEditingItemId(null);
+    },
+  });
+
   const [showForm, setShowForm] = useState(false);
   const [formDay, setFormDay] = useState(1);
   const [formTime, setFormTime] = useState("");
   const [formTitle, setFormTitle] = useState("");
   const [formDesc, setFormDesc] = useState("");
   const [formCategory, setFormCategory] = useState("activity");
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editDay, setEditDay] = useState(1);
+  const [editTime, setEditTime] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editCategory, setEditCategory] = useState("activity");
 
   const totalDays = useMemo(() => {
     if (!trip?.startDate || !trip?.endDate) return 3;
@@ -129,6 +167,32 @@ export default function ItineraryBuilder() {
         setFormTime("");
         setShowForm(false);
       },
+    });
+  };
+
+  const startEditing = (item: ItineraryItem) => {
+    setEditingItemId(item.id);
+    setEditDay(item.dayNumber);
+    setEditTime(item.timeSlot || "");
+    setEditTitle(item.title);
+    setEditDesc(item.description || "");
+    setEditCategory(item.category);
+  };
+
+  const cancelEditing = () => {
+    setEditingItemId(null);
+  };
+
+  const handleUpdate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItemId || !editTitle.trim()) return;
+    updateMutation.mutate({
+      id: editingItemId,
+      dayNumber: editDay,
+      timeSlot: editTime,
+      title: editTitle.trim(),
+      description: editDesc.trim(),
+      category: editCategory,
     });
   };
 
@@ -310,35 +374,134 @@ export default function ItineraryBuilder() {
                             data-testid={`itinerary-item-${item.id}`}
                           >
                             <div className="absolute -left-[2.15rem] top-5 w-3 h-3 rounded-full bg-secondary border-2 border-background" />
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 flex-wrap mb-1">
-                                  {item.timeSlot && (
-                                    <span className="inline-flex items-center gap-1 text-xs font-medium opacity-70">
-                                      <Clock className="h-3 w-3" /> {item.timeSlot}
-                                    </span>
-                                  )}
-                                  <span className="inline-flex items-center gap-1 text-xs font-medium">
-                                    {getCategoryIcon(item.category)} {catStyle.label}
-                                  </span>
+                            {editingItemId === item.id ? (
+                              <form onSubmit={handleUpdate} className="space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Day</label>
+                                    <Select value={String(editDay)} onValueChange={(v) => setEditDay(Number(v))}>
+                                      <SelectTrigger data-testid={`select-edit-day-${item.id}`}>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {Array.from({ length: totalDays }, (_, i) => (
+                                          <SelectItem key={i + 1} value={String(i + 1)}>
+                                            Day {i + 1}{dayDates[i] ? ` - ${format(dayDates[i], "MMM d")}` : ""}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Time</label>
+                                    <Input
+                                      type="time"
+                                      value={editTime}
+                                      onChange={(e) => setEditTime(e.target.value)}
+                                      className="bg-background"
+                                      data-testid={`input-edit-time-${item.id}`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Category</label>
+                                    <Select value={editCategory} onValueChange={setEditCategory}>
+                                      <SelectTrigger data-testid={`select-edit-category-${item.id}`}>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {CATEGORIES.map((category) => (
+                                          <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
                                 </div>
-                                <h3 className="font-semibold text-foreground" data-testid={`text-item-title-${item.id}`}>
-                                  {item.title}
-                                </h3>
-                                {item.description && (
-                                  <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
-                                )}
+                                <div>
+                                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Title</label>
+                                  <Input
+                                    value={editTitle}
+                                    onChange={(e) => setEditTitle(e.target.value)}
+                                    className="bg-background"
+                                    data-testid={`input-edit-title-${item.id}`}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Description</label>
+                                  <Textarea
+                                    value={editDesc}
+                                    onChange={(e) => setEditDesc(e.target.value)}
+                                    className="bg-background resize-none"
+                                    rows={2}
+                                    data-testid={`input-edit-description-${item.id}`}
+                                  />
+                                </div>
+                                <div className="flex gap-2 flex-wrap">
+                                  <Button
+                                    type="submit"
+                                    size="sm"
+                                    className="rounded-xl"
+                                    disabled={updateMutation.isPending || !editTitle.trim()}
+                                    data-testid={`button-save-item-${item.id}`}
+                                  >
+                                    {updateMutation.isPending ? (
+                                      <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Saving...</>
+                                    ) : (
+                                      <><Save className="h-4 w-4 mr-1" /> Save</>
+                                    )}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={cancelEditing}
+                                    data-testid={`button-cancel-edit-${item.id}`}
+                                  >
+                                    <X className="h-4 w-4 mr-1" /> Cancel
+                                  </Button>
+                                </div>
+                              </form>
+                            ) : (
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                                    {item.timeSlot && (
+                                      <span className="inline-flex items-center gap-1 text-xs font-medium opacity-70">
+                                        <Clock className="h-3 w-3" /> {item.timeSlot}
+                                      </span>
+                                    )}
+                                    <span className="inline-flex items-center gap-1 text-xs font-medium">
+                                      {getCategoryIcon(item.category)} {catStyle.label}
+                                    </span>
+                                  </div>
+                                  <h3 className="font-semibold text-foreground" data-testid={`text-item-title-${item.id}`}>
+                                    {item.title}
+                                  </h3>
+                                  {item.description && (
+                                    <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => startEditing(item)}
+                                    className="invisible group-hover:visible text-muted-foreground"
+                                    data-testid={`button-edit-item-${item.id}`}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => deleteMutation.mutate(item.id)}
+                                    className="invisible group-hover:visible text-muted-foreground hover:text-destructive"
+                                    data-testid={`button-delete-item-${item.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => deleteMutation.mutate(item.id)}
-                                className="invisible group-hover:visible text-muted-foreground hover:text-destructive"
-                                data-testid={`button-delete-item-${item.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                            )}
                           </div>
                         );
                       })}

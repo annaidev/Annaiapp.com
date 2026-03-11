@@ -5,13 +5,13 @@ import { apiRequest } from "@/lib/queryClient";
 import type { TripResponse, TripsListResponse } from "@shared/schema";
 
 export function useTrips() {
-  return useQuery({
+  return useQuery<TripsListResponse>({
     queryKey: [api.trips.list.path],
   });
 }
 
 export function useTrip(id: number) {
-  return useQuery({
+  return useQuery<TripResponse | null>({
     queryKey: ['/api/trips', id],
     enabled: !!id,
   });

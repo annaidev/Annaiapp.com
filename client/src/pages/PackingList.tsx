@@ -12,6 +12,7 @@ import { useGeneratePackingList } from "@/hooks/use-ai";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useEntitlements } from "@/hooks/use-entitlements";
 
 export default function PackingList() {
   const [, params] = useRoute("/trips/:id/packing-list");
@@ -24,6 +25,7 @@ export default function PackingList() {
   const updateMutation = useUpdatePackingListItem();
   const deleteMutation = useDeletePackingListItem();
   const packMutation = useGeneratePackingList();
+  const { data: entitlements } = useEntitlements(Boolean(tripId));
 
   const [newItem, setNewItem] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -90,6 +92,10 @@ export default function PackingList() {
           <div className="flex flex-col sm:flex-row gap-3 mb-6">
             <Button
               onClick={() => {
+                if (!entitlements?.enabledFeatures.includes("ai_packing")) {
+                  window.location.href = "/pricing";
+                  return;
+                }
                 packMutation.mutate({ destination: trip.destination }, {
                   onSuccess: (data) => {
                     const existing = new Set((items || []).map(i => i.item.toLowerCase()));
@@ -105,7 +111,7 @@ export default function PackingList() {
               {packMutation.isPending ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
               ) : (
-                <><Sparkles className="h-4 w-4 mr-2" /> Get AI Suggestions</>
+                <><Sparkles className="h-4 w-4 mr-2" /> {entitlements?.enabledFeatures.includes("ai_packing") ? "Get AI Suggestions" : "Unlock AI Suggestions"}</>
               )}
             </Button>
           </div>

@@ -1,0 +1,397 @@
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useUser } from "@/hooks/use-auth";
+import { useProfile, useUpdateProfile } from "@/hooks/use-profile";
+
+type LanguageCode = "en" | "es" | "zh" | "ja" | "ko";
+
+type TranslationDict = Record<string, string>;
+
+const STORAGE_KEY = "annai-language";
+
+const languageOptions: Array<{ value: LanguageCode; label: string }> = [
+  { value: "en", label: "English" },
+  { value: "es", label: "Español" },
+  { value: "zh", label: "中文" },
+  { value: "ja", label: "日本語" },
+  { value: "ko", label: "한국어" },
+];
+
+const en: TranslationDict = {
+  "nav.upgrade": "Upgrade",
+  "nav.account": "Account",
+  "nav.signOut": "Sign Out",
+  "plan.pro": "Annai Pro",
+  "plan.free": "Annai Free",
+  "home.title": "Annai Travel Planner",
+  "home.subtitle": "Build trips, track budgets, store documents, and keep every travel detail in one place.",
+  "home.newTrip": "Plan New Trip",
+  "home.emptyTitle": "No trips planned yet",
+  "home.emptyBody": "Create your first trip and start building your itinerary, budget, packing list, and document vault.",
+  "home.createFirst": "Create First Trip",
+  "home.viewDetails": "View Details",
+  "pricing.badge": "Simple Pricing",
+  "pricing.title": "One app, two clear plans.",
+  "pricing.subtitle": "Free covers core planning. Pro unlocks AI help, premium maps, and future paid modules.",
+  "pricing.freeTitle": "Annai Free",
+  "pricing.freeBody": "Trip planning, itinerary building, budgets, packing lists, and document storage.",
+  "pricing.proTitle": "Annai Pro",
+  "pricing.proBody": "AI trip help, destination insights, premium map features, and future premium modules like Camping.",
+  "pricing.monthly": "$9.99 / month",
+  "pricing.currentPlan": "Current plan",
+  "pricing.billingState": "Billing state",
+  "pricing.start": "Start Annai Pro",
+  "pricing.restore": "Restore Purchases",
+  "pricing.freeFeature1": "Trip creation and editing",
+  "pricing.freeFeature2": "Manual itinerary planning",
+  "pricing.freeFeature3": "Budget tracking and document vault",
+  "pricing.freeFeature4": "Packing list management",
+  "pricing.proFeature1": "Trip-aware AI assistant",
+  "pricing.proFeature2": "AI trip plans, safety, phrases, and weather",
+  "pricing.proFeature3": "Safety map and premium location tools",
+  "pricing.proFeature4": "Future premium modules",
+  "account.title": "Account",
+  "account.subtitle": "Manage your plan, subscription state, and traveler profile.",
+  "account.profile": "Traveler Profile",
+  "account.plan": "Plan",
+  "account.subscription": "Subscription",
+  "account.features": "Enabled features",
+  "account.language": "Preferred language",
+  "account.currency": "Home currency",
+  "account.saveProfile": "Save Profile",
+  "account.openPlanner": "Open Travel Planner",
+  "account.upgrade": "Upgrade to Pro",
+  "trip.back": "Back to Trips",
+  "trip.destination": "Destination",
+  "trip.edit": "Edit Trip",
+  "trip.overviewTab": "Overview & Planning",
+  "trip.aiTab": "Destination Info",
+  "trip.readiness": "Trip Readiness",
+  "trip.packed": "Packed",
+  "trip.documents": "Documents",
+  "trip.expenses": "Expenses",
+  "trip.daysPlanned": "Days Planned",
+  "trip.notes": "Travel Notes",
+  "trip.packing": "Packing List",
+  "trip.budget": "Budget Tracker",
+  "trip.vault": "Document Vault",
+  "trip.itinerary": "Itinerary",
+  "trip.manage": "Manage",
+  "trip.plan": "Plan",
+  "trip.quickBookings": "Quick Bookings",
+  "trip.upgradeCard": "Upgrade to Annai Pro to use the travel assistant, AI destination tools, and premium map features.",
+  "trip.settingsTitle": "Trip Plan Settings",
+  "trip.settingsBody": "Choose how detailed you want the suggested base plan to be.",
+  "trip.days": "Days",
+  "trip.planDepth": "Plan depth",
+  "trip.travelStyle": "Travel style",
+  "trip.quick": "Quick",
+  "trip.detailed": "Detailed",
+  "trip.styleBalanced": "Balanced",
+  "trip.styleFood": "Food",
+  "trip.styleCulture": "Culture",
+  "trip.styleFamily": "Family",
+  "trip.styleRelaxed": "Relaxed",
+  "trip.assistantTitle": "Travel AI Assistant",
+  "trip.askAnnai": "Ask Annai",
+  "trip.assistantBody": "Ask short trip questions and get destination-aware help for this exact trip.",
+  "trip.assistantPlaceholder": "Ask about transport, arrival tips, timing, neighborhoods, customs, or anything else for this trip.",
+  "trip.assistantSend": "Ask Annai",
+  "trip.assistantEmpty": "Start with a travel question for this trip.",
+  "trip.generatePlan": "Generate Trip Plan",
+  "trip.selectTool": "Select an AI tool",
+  "trip.selectToolBody": "Generate a reusable base trip plan or ask for safety reports, cultural tips, local phrases, and weather forecasts.",
+  "trip.tripPlan": "Trip Plan",
+  "trip.safety": "Safety & Embassy",
+  "trip.culture": "Cultural Etiquette",
+  "trip.phrases": "Local Phrases",
+  "trip.weather": "Weather Forecast",
+  "trip.usePlan": "Use Plan in Itinerary",
+  "trip.verify": "Verify Before You Go",
+  "budget.title": "Budget Tracker",
+  "budget.add": "Add Expense",
+  "budget.total": "Total Spent",
+  "budget.byCategory": "Spending by Category",
+  "budget.all": "All Expenses",
+  "budget.emptyTitle": "No expenses yet",
+  "budget.emptyBody": "Add your first expense to start tracking your budget.",
+  "budget.description": "Description",
+  "budget.amount": "Amount",
+  "budget.category": "Category",
+  "budget.cancel": "Cancel",
+  "budget.save": "Save Expense",
+  "docs.title": "Document Vault",
+  "docs.back": "Back to Dashboard",
+  "docs.add": "Add Document",
+  "docs.cancel": "Cancel",
+  "docs.new": "New Document",
+  "docs.type": "Document Type",
+  "docs.label": "Label",
+  "docs.reference": "Reference Number",
+  "docs.notes": "Notes",
+  "docs.save": "Save Document",
+  "docs.emptyTitle": "No documents yet",
+  "docs.emptyBody": "Add travel documents like flight bookings, hotel reservations, transport confirmations, and insurance details.",
+  "docs.importTitle": "Import Booking Confirmation",
+  "docs.importBody": "Paste a forwarded confirmation email or booking text. Annai will suggest documents and budget items for review before saving.",
+  "docs.importInput": "Confirmation text",
+  "docs.importPreview": "Review Import",
+  "docs.importApply": "Save Imported Items",
+  "docs.importSummary": "Import summary",
+  "docs.importWarnings": "Things to verify",
+  "auth.welcome": "Welcome to Annai",
+  "auth.create": "Create Account",
+  "auth.reset": "Reset Password",
+  "auth.signInBody": "Sign in to your travel companion",
+  "auth.createBody": "Set up your travel account",
+  "auth.username": "Username",
+  "auth.password": "Password",
+  "auth.securityQuestion": "Security Question",
+  "auth.securityAnswer": "Security Answer",
+  "auth.signIn": "Sign In",
+  "auth.createAccount": "Create Account",
+};
+
+const makeVariant = (overrides: TranslationDict): TranslationDict => ({ ...en, ...overrides });
+
+const dictionaries: Record<LanguageCode, TranslationDict> = {
+  en,
+  es: makeVariant({
+    "nav.upgrade": "Mejorar",
+    "nav.account": "Cuenta",
+    "nav.signOut": "Cerrar sesión",
+    "plan.pro": "Annai Pro",
+    "plan.free": "Annai Gratis",
+    "home.subtitle": "Crea viajes, controla presupuestos, guarda documentos y reúne cada detalle del viaje en un solo lugar.",
+    "home.newTrip": "Planear viaje",
+    "home.emptyTitle": "Aún no hay viajes",
+    "home.emptyBody": "Crea tu primer viaje y empieza a construir tu itinerario, presupuesto, lista de equipaje y bóveda de documentos.",
+    "home.createFirst": "Crear primer viaje",
+    "home.viewDetails": "Ver detalles",
+    "pricing.badge": "Precio simple",
+    "pricing.title": "Una app, dos planes claros.",
+    "pricing.subtitle": "Gratis cubre la planificación principal. Pro desbloquea ayuda con IA, mapas premium y futuros módulos de pago.",
+    "pricing.freeTitle": "Annai Gratis",
+    "pricing.freeBody": "Planificación de viajes, itinerarios, presupuestos, listas de equipaje y almacenamiento de documentos.",
+    "pricing.proBody": "Ayuda de IA para el viaje, información del destino, funciones premium de mapas y futuros módulos premium como Camping.",
+    "pricing.currentPlan": "Plan actual",
+    "pricing.billingState": "Estado de facturación",
+    "pricing.start": "Iniciar Annai Pro",
+    "pricing.restore": "Restaurar compras",
+    "account.title": "Cuenta",
+    "account.subtitle": "Gestiona tu plan, el estado de la suscripción y tu perfil de viajero.",
+    "account.profile": "Perfil del viajero",
+    "account.plan": "Plan",
+    "account.subscription": "Suscripción",
+    "account.features": "Funciones habilitadas",
+    "account.language": "Idioma preferido",
+    "account.currency": "Moneda base",
+    "account.saveProfile": "Guardar perfil",
+    "account.openPlanner": "Abrir Travel Planner",
+    "account.upgrade": "Pasar a Pro",
+    "trip.back": "Volver a viajes",
+    "trip.edit": "Editar viaje",
+    "trip.overviewTab": "Resumen y planificación",
+    "trip.aiTab": "Información del destino",
+    "trip.readiness": "Estado del viaje",
+    "trip.quickBookings": "Reservas rápidas",
+    "trip.upgradeCard": "Actualiza a Annai Pro para usar el asistente de viaje, las herramientas de IA del destino y las funciones premium de mapas.",
+    "trip.settingsTitle": "Configuración del plan",
+    "trip.settingsBody": "Elige el nivel de detalle del plan base sugerido.",
+    "trip.planDepth": "Profundidad del plan",
+    "trip.travelStyle": "Estilo de viaje",
+    "trip.assistantTitle": "Asistente IA de viaje",
+    "trip.askAnnai": "Preguntar a Annai",
+    "trip.assistantBody": "Haz preguntas cortas y obtén ayuda específica para este viaje.",
+    "trip.assistantPlaceholder": "Pregunta sobre transporte, llegada, tiempos, barrios, costumbres o cualquier otro tema de este viaje.",
+    "trip.assistantSend": "Preguntar a Annai",
+    "trip.generatePlan": "Generar plan de viaje",
+    "budget.add": "Añadir gasto",
+    "budget.total": "Total gastado",
+    "budget.byCategory": "Gasto por categoría",
+    "budget.all": "Todos los gastos",
+    "budget.emptyTitle": "Aún no hay gastos",
+    "docs.back": "Volver al panel",
+    "docs.add": "Añadir documento",
+    "docs.new": "Nuevo documento",
+    "docs.importTitle": "Importar confirmación",
+    "docs.importBody": "Pega un correo reenviado o texto de reserva. Annai sugerirá documentos y gastos para revisar antes de guardar.",
+    "docs.importPreview": "Revisar importación",
+    "docs.importApply": "Guardar elementos importados",
+    "auth.welcome": "Bienvenido a Annai",
+    "auth.create": "Crear cuenta",
+    "auth.reset": "Restablecer contraseña",
+    "auth.signIn": "Iniciar sesión",
+    "auth.createAccount": "Crear cuenta",
+  }),
+  zh: makeVariant({
+    "nav.upgrade": "升级",
+    "nav.account": "账户",
+    "nav.signOut": "退出登录",
+    "plan.free": "Annai 免费版",
+    "home.subtitle": "在一个地方规划行程、跟踪预算、保存文件并整理所有旅行细节。",
+    "home.newTrip": "新建行程",
+    "home.emptyTitle": "还没有行程",
+    "home.createFirst": "创建第一个行程",
+    "pricing.badge": "简单定价",
+    "pricing.title": "一个应用，两种清晰方案。",
+    "pricing.subtitle": "免费版提供核心规划功能。Pro 解锁 AI 帮助、高级地图和未来的付费模块。",
+    "account.title": "账户",
+    "account.profile": "旅行者资料",
+    "account.language": "首选语言",
+    "account.currency": "本位币",
+    "account.saveProfile": "保存资料",
+    "trip.overviewTab": "总览与规划",
+    "trip.aiTab": "目的地信息",
+    "trip.readiness": "行前准备",
+    "trip.quickBookings": "快捷预订",
+    "trip.assistantTitle": "旅行 AI 助手",
+    "trip.askAnnai": "询问 Annai",
+    "trip.assistantSend": "询问 Annai",
+    "trip.generatePlan": "生成行程计划",
+    "budget.add": "添加支出",
+    "budget.total": "总支出",
+    "docs.add": "添加文件",
+    "docs.importTitle": "导入预订确认",
+    "docs.importPreview": "查看导入",
+    "docs.importApply": "保存导入内容",
+    "auth.welcome": "欢迎使用 Annai",
+    "auth.create": "创建账户",
+    "auth.signIn": "登录",
+  }),
+  ja: makeVariant({
+    "nav.upgrade": "アップグレード",
+    "nav.account": "アカウント",
+    "nav.signOut": "サインアウト",
+    "plan.free": "Annai Free",
+    "home.subtitle": "旅行の計画、予算管理、書類保存を1か所で行えます。",
+    "home.newTrip": "新しい旅行を作成",
+    "home.emptyTitle": "まだ旅行がありません",
+    "home.createFirst": "最初の旅行を作成",
+    "pricing.badge": "シンプルな料金",
+    "pricing.title": "1つのアプリ、2つの明確なプラン。",
+    "pricing.subtitle": "Free は基本計画向け。Pro で AI 支援、高度な地図機能、今後の有料モジュールを利用できます。",
+    "account.title": "アカウント",
+    "account.profile": "旅行者プロフィール",
+    "account.language": "優先言語",
+    "account.currency": "基準通貨",
+    "account.saveProfile": "プロフィールを保存",
+    "trip.overviewTab": "概要と計画",
+    "trip.aiTab": "目的地情報",
+    "trip.readiness": "旅行準備状況",
+    "trip.quickBookings": "クイック予約",
+    "trip.assistantTitle": "旅行 AI アシスタント",
+    "trip.askAnnai": "Annai に質問",
+    "trip.assistantSend": "Annai に質問",
+    "trip.generatePlan": "旅行プランを生成",
+    "budget.add": "支出を追加",
+    "docs.add": "書類を追加",
+    "docs.importTitle": "予約確認を取り込む",
+    "docs.importPreview": "取り込み内容を確認",
+    "docs.importApply": "取り込み内容を保存",
+    "auth.welcome": "Annai へようこそ",
+    "auth.create": "アカウント作成",
+    "auth.signIn": "サインイン",
+  }),
+  ko: makeVariant({
+    "nav.upgrade": "업그레이드",
+    "nav.account": "계정",
+    "nav.signOut": "로그아웃",
+    "plan.free": "Annai 무료",
+    "home.subtitle": "여행 계획, 예산 추적, 문서 보관을 한곳에서 관리하세요.",
+    "home.newTrip": "새 여행 계획",
+    "home.emptyTitle": "아직 여행이 없습니다",
+    "home.createFirst": "첫 여행 만들기",
+    "pricing.badge": "간단한 요금제",
+    "pricing.title": "하나의 앱, 두 가지 명확한 플랜.",
+    "pricing.subtitle": "무료는 핵심 계획 기능을 제공합니다. Pro는 AI 도움말, 프리미엄 지도, 향후 유료 모듈을 엽니다.",
+    "account.title": "계정",
+    "account.profile": "여행자 프로필",
+    "account.language": "기본 언어",
+    "account.currency": "기준 통화",
+    "account.saveProfile": "프로필 저장",
+    "trip.overviewTab": "개요 및 계획",
+    "trip.aiTab": "목적지 정보",
+    "trip.readiness": "여행 준비 상태",
+    "trip.quickBookings": "빠른 예약",
+    "trip.assistantTitle": "여행 AI 도우미",
+    "trip.askAnnai": "Annai에 질문",
+    "trip.assistantSend": "Annai에 질문",
+    "trip.generatePlan": "여행 계획 생성",
+    "budget.add": "지출 추가",
+    "docs.add": "문서 추가",
+    "docs.importTitle": "예약 확인 가져오기",
+    "docs.importPreview": "가져오기 검토",
+    "docs.importApply": "가져온 항목 저장",
+    "auth.welcome": "Annai에 오신 것을 환영합니다",
+    "auth.create": "계정 만들기",
+    "auth.signIn": "로그인",
+  }),
+};
+
+type I18nContextValue = {
+  language: LanguageCode;
+  setLanguage: (language: LanguageCode) => void;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+  languageOptions: typeof languageOptions;
+};
+
+const I18nContext = createContext<I18nContextValue | null>(null);
+
+function readStoredLanguage(): LanguageCode {
+  if (typeof window === "undefined") {
+    return "en";
+  }
+  const value = window.localStorage.getItem(STORAGE_KEY);
+  return value === "en" || value === "es" || value === "zh" || value === "ja" || value === "ko" ? value : "en";
+}
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const { data: user } = useUser();
+  const { data: profile } = useProfile(Boolean(user));
+  const updateProfile = useUpdateProfile();
+  const [localLanguage, setLocalLanguage] = useState<LanguageCode>(readStoredLanguage);
+
+  useEffect(() => {
+    if (profile?.preferredLanguage && profile.preferredLanguage !== localLanguage) {
+      setLocalLanguage(profile.preferredLanguage);
+    }
+  }, [profile?.preferredLanguage]);
+
+  const setLanguage = (language: LanguageCode) => {
+    setLocalLanguage(language);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY, language);
+    }
+    if (user) {
+      updateProfile.mutate({ preferredLanguage: language });
+    }
+  };
+
+  const value = useMemo<I18nContextValue>(() => {
+    const activeLanguage = profile?.preferredLanguage ?? localLanguage;
+    const dict = dictionaries[activeLanguage] ?? dictionaries.en;
+    return {
+      language: activeLanguage,
+      setLanguage,
+      languageOptions,
+      t: (key, vars) => {
+        const source = dict[key] ?? dictionaries.en[key] ?? key;
+        if (!vars) return source;
+        return Object.entries(vars).reduce(
+          (text, [varKey, varValue]) => text.replaceAll(`{${varKey}}`, String(varValue)),
+          source,
+        );
+      },
+    };
+  }, [localLanguage, profile?.preferredLanguage]);
+
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function useI18n() {
+  const context = useContext(I18nContext);
+  if (!context) {
+    throw new Error("useI18n must be used inside I18nProvider");
+  }
+  return context;
+}
