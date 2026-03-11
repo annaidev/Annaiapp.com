@@ -118,7 +118,25 @@ export function setupAuth(app: Express) {
   );
 
   app.use(passport.initialize());
-  app.use(passport.session());
+  app.use((req, res, next) => {
+    passport.session()(req, res, (err: unknown) => {
+      if (!err) {
+        return next();
+      }
+
+      if (err instanceof Error && err.message === "Failed to deserialize user out of session") {
+        req.logout(() => {
+          req.session?.destroy(() => {
+            res.clearCookie("connect.sid");
+            next();
+          });
+        });
+        return;
+      }
+
+      next(err);
+    });
+  });
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {
@@ -141,7 +159,10 @@ export function setupAuth(app: Express) {
   passport.deserializeUser(async (id: number, done) => {
     try {
       const user = await storage.getUser(id);
-      done(null, user || undefined);
+      if (!user) {
+        return done(null, false);
+      }
+      done(null, user);
     } catch (err) {
       done(err);
     }
