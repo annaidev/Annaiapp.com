@@ -188,6 +188,26 @@ export function useWeather() {
   });
 }
 
+export function useCustomsEntry() {
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (tripId: number) => {
+      const res = await fetch(api.ai.customsEntry.path, {
+        method: api.ai.customsEntry.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tripId }),
+        credentials: "include",
+      });
+      const parsed = await parseJsonResponse<unknown>(res, "Failed to get customs and entry guidance");
+      return api.ai.customsEntry.responses[200].parse(parsed);
+    },
+    onError: (error) => {
+      toast({ title: "Customs guidance unavailable", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
 export function useTravelAssistant() {
   const { toast } = useToast();
 

@@ -25,6 +25,7 @@ export default function AccountPage() {
   const { t, languageOptions, language, setLanguage } = useI18n();
   const { toast } = useToast();
   const [homeCurrency, setHomeCurrency] = useState("USD");
+  const [citizenship, setCitizenship] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const queryClient = useQueryClient();
 
@@ -32,13 +33,15 @@ export default function AccountPage() {
     if (profile?.homeCurrency) {
       setHomeCurrency(profile.homeCurrency);
     }
-  }, [profile?.homeCurrency]);
+    setCitizenship(profile?.citizenship ?? "");
+  }, [profile?.citizenship, profile?.homeCurrency]);
 
   const saveProfile = () => {
     updateProfile.mutate(
       {
         preferredLanguage: language,
         homeCurrency: homeCurrency.toUpperCase(),
+        citizenship: citizenship.trim() || null,
       },
       {
         onSuccess: () => {
@@ -180,6 +183,17 @@ export default function AccountPage() {
                     className="rounded-2xl"
                     placeholder="USD"
                     maxLength={3}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Citizenship</label>
+                  <Input
+                    value={citizenship}
+                    onChange={(event) => setCitizenship(event.target.value)}
+                    className="rounded-2xl"
+                    placeholder="United States"
+                    maxLength={120}
                   />
                 </div>
 

@@ -7,6 +7,7 @@ export type TravelerProfile = {
   username: string;
   preferredLanguage: "en" | "es" | "zh" | "ja" | "ko";
   homeCurrency: string;
+  citizenship: string | null;
 };
 
 export function useProfile(enabled = true) {
@@ -21,7 +22,7 @@ export function useProfile(enabled = true) {
 
 export function useUpdateProfile() {
   return useMutation({
-    mutationFn: async (payload: Partial<Pick<TravelerProfile, "preferredLanguage" | "homeCurrency">>) => {
+    mutationFn: async (payload: Partial<Pick<TravelerProfile, "preferredLanguage" | "homeCurrency" | "citizenship">>) => {
       const res = await apiRequest(api.profile.update.method, api.profile.update.path, payload);
       return (await res.json()) as TravelerProfile;
     },

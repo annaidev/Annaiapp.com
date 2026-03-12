@@ -47,6 +47,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
       pro_access_updated_at TIMESTAMP,
       preferred_language TEXT NOT NULL DEFAULT 'en',
       home_currency TEXT NOT NULL DEFAULT 'USD',
+      citizenship TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -59,7 +60,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
     ADD COLUMN IF NOT EXISTS pro_access_reason TEXT,
     ADD COLUMN IF NOT EXISTS pro_access_updated_at TIMESTAMP,
     ADD COLUMN IF NOT EXISTS preferred_language TEXT NOT NULL DEFAULT 'en',
-    ADD COLUMN IF NOT EXISTS home_currency TEXT NOT NULL DEFAULT 'USD';
+    ADD COLUMN IF NOT EXISTS home_currency TEXT NOT NULL DEFAULT 'USD',
+    ADD COLUMN IF NOT EXISTS citizenship TEXT;
   `);
 
   await pool.query(`
@@ -125,13 +127,21 @@ export async function ensureDatabaseSchema(): Promise<void> {
     CREATE TABLE IF NOT EXISTS annai_travel_trips (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES annai_travel_users(id) ON DELETE CASCADE,
+      origin TEXT,
       destination TEXT NOT NULL,
+      trip_type TEXT NOT NULL DEFAULT 'one_way',
       start_date TIMESTAMP,
       end_date TIMESTAMP,
       notes TEXT,
       citizenship TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE annai_travel_trips
+    ADD COLUMN IF NOT EXISTS origin TEXT,
+    ADD COLUMN IF NOT EXISTS trip_type TEXT NOT NULL DEFAULT 'one_way';
   `);
 
   await pool.query(`

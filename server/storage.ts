@@ -552,6 +552,7 @@ export class MemStorage implements IStorage {
       proAccessUpdatedAt: user.proAccessUpdatedAt ?? null,
       preferredLanguage: user.preferredLanguage ?? "en",
       homeCurrency: user.homeCurrency ?? "USD",
+      citizenship: user.citizenship ?? null,
       createdAt: new Date(),
     };
     this.usersData.push(created);
@@ -797,7 +798,9 @@ export class MemStorage implements IStorage {
     const created: TripResponse = {
       id: this.tripId++,
       userId: trip.userId ?? null,
+      origin: trip.origin ?? null,
       destination: trip.destination,
+      tripType: trip.tripType ?? "one_way",
       startDate: trip.startDate ?? null,
       endDate: trip.endDate ?? null,
       notes: trip.notes ?? null,

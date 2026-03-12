@@ -6,7 +6,18 @@ import { Plus, MapPin, Calendar as CalendarIcon, Trash2, Clock } from "lucide-re
 import { useTrips, useDeleteTrip } from "@/hooks/use-trips";
 import { TripForm } from "@/components/TripForm";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { NavBar } from "@/components/NavBar";
+import { getDestinationFallbackArt, getDestinationImageUrl } from "@/lib/destination-art";
 import { useI18n } from "@/lib/i18n";
 
 function getCountdown(startDate: Date | string | null, endDate: Date | string | null) {
@@ -25,15 +36,11 @@ function getCountdown(startDate: Date | string | null, endDate: Date | string | 
   return { label: "Happening now!", color: "text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/30" };
 }
 
-function getHeroImage(destination: string) {
-  const city = destination.split(",")[0].trim();
-  return `https://loremflickr.com/800/400/${encodeURIComponent(city)},travel,landmark`;
-}
-
 export default function Home() {
   const { data: trips, isLoading } = useTrips();
   const deleteMutation = useDeleteTrip();
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [tripPendingDelete, setTripPendingDelete] = useState<number | null>(null);
   const { t } = useI18n();
 
   const container = {
@@ -110,21 +117,29 @@ export default function Home() {
               const countdown = getCountdown(trip.startDate, trip.endDate);
               return (
                 <motion.div key={trip.id} variants={item}>
-                  <Link 
-                    href={`/trips/${trip.id}`}
-                    className="group block relative h-full rounded-3xl overflow-hidden hover-lift"
+                  <div
+                    className="group relative h-full rounded-3xl overflow-hidden hover-lift"
                     data-testid={`card-trip-${trip.id}`}
                   >
+                    <Link
+                      href={`/trips/${trip.id}`}
+                      className="absolute inset-0 z-10 rounded-3xl"
+                      aria-label={`Open trip ${trip.destination}`}
+                    />
                     <div className="absolute inset-0 z-0">
                       <img 
-                        src={getHeroImage(trip.destination)} 
+                        src={getDestinationImageUrl(trip.destination, 800, 400)}
                         alt=""
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = getDestinationFallbackArt(trip.destination, 800, 400);
+                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/10" />
                     </div>
                     
-                    <div className="relative z-10 h-full flex flex-col p-6 min-h-[240px]">
+                    <div className="relative z-20 h-full flex flex-col p-6 min-h-[240px] pointer-events-none">
                       <div className="flex justify-between items-start mb-4">
                         {countdown && (
                           <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${countdown.color}`} data-testid={`badge-countdown-${trip.id}`}>
@@ -135,13 +150,12 @@ export default function Home() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="text-white/70 hover:text-red-400 hover:bg-red-500/20 -mr-2 -mt-2 z-20"
+                          className="pointer-events-auto text-white/70 hover:text-red-400 hover:bg-red-500/20 -mr-2 -mt-2 z-20"
                           data-testid={`button-delete-trip-${trip.id}`}
                           onClick={(e) => {
                             e.preventDefault();
-                            if (confirm("Are you sure you want to delete this trip?")) {
-                              deleteMutation.mutate(trip.id);
-                            }
+                            e.stopPropagation();
+                            setTripPendingDelete(trip.id);
                           }}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -152,6 +166,12 @@ export default function Home() {
                         <h3 className="text-2xl font-bold text-white mb-2 line-clamp-1 drop-shadow-md" data-testid={`text-destination-${trip.id}`}>
                           {trip.destination}
                         </h3>
+                        {trip.origin && (
+                          <div className="flex items-center text-white/80 mb-2 text-sm">
+                            <MapPin className="h-4 w-4 mr-2 opacity-70" />
+                            {trip.origin} {trip.tripType === "round_trip" ? "• Round trip" : "• One way"}
+                          </div>
+                        )}
                         {(trip.startDate || trip.endDate) && (
                           <div className="flex items-center text-white/80 mb-3 font-medium text-sm">
                             <CalendarIcon className="h-4 w-4 mr-2 opacity-70" />
@@ -167,7 +187,7 @@ export default function Home() {
                         </div>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 </motion.div>
               );
             })}
@@ -176,6 +196,31 @@ export default function Home() {
       </main>
 
       <TripForm open={isFormOpen} onOpenChange={setIsFormOpen} />
+
+      <AlertDialog open={tripPendingDelete !== null} onOpenChange={(open) => !open && setTripPendingDelete(null)}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete trip?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this trip? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (tripPendingDelete !== null) {
+                  deleteMutation.mutate(tripPendingDelete);
+                }
+                setTripPendingDelete(null);
+              }}
+            >
+              Delete Trip
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

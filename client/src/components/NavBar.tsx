@@ -1,9 +1,19 @@
 import { Link } from "wouter";
-import { Crown, LogOut, User } from "lucide-react";
+import { LogOut, User } from "lucide-react";
+import { useState } from "react";
 import { useUser, useLogout } from "@/hooks/use-auth";
 import { useProStatus } from "@/hooks/use-pro-status";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/lib/i18n";
 
 function AnnaiLogo({ className }: { className?: string }) {
@@ -46,6 +56,7 @@ export function NavBar() {
   const logoutMutation = useLogout();
   const { data: proStatus } = useProStatus(Boolean(user));
   const { t } = useI18n();
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b glass">
@@ -59,15 +70,6 @@ export function NavBar() {
 
         {user && (
           <div className="flex items-center gap-3">
-            {proStatus && (
-              <Badge
-                variant={proStatus.hasProAccess ? "default" : "secondary"}
-                className="rounded-full px-3 py-1 text-xs font-semibold"
-              >
-                <Crown className="mr-1 h-3.5 w-3.5" />
-                {proStatus.hasProAccess ? t("plan.pro") : t("plan.free")}
-              </Badge>
-            )}
             {!proStatus?.hasProAccess && (
               <Button asChild variant="outline" size="sm" className="rounded-xl" data-testid="button-upgrade-nav">
                 <Link href="/pricing">{t("nav.upgrade")}</Link>
@@ -82,7 +84,7 @@ export function NavBar() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => logoutMutation.mutate()}
+              onClick={() => setSignOutOpen(true)}
               className="text-muted-foreground rounded-xl"
               data-testid="button-logout"
             >
@@ -92,6 +94,29 @@ export function NavBar() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={signOutOpen} onOpenChange={setSignOutOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to sign out of Annai Travel Planner?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-2xl"
+              onClick={() => {
+                setSignOutOpen(false);
+                logoutMutation.mutate();
+              }}
+            >
+              Sign Out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
   );
 }

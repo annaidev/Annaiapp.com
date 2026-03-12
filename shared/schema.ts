@@ -24,6 +24,9 @@ export type FeatureKey = (typeof featureKeyValues)[number];
 export const supportedLanguageValues = ["en", "es", "zh", "ja", "ko"] as const;
 export type SupportedLanguage = (typeof supportedLanguageValues)[number];
 
+export const tripTypeValues = ["one_way", "round_trip"] as const;
+export type TripType = (typeof tripTypeValues)[number];
+
 export const subscriptionStatusValues = [
   "inactive",
   "active",
@@ -51,13 +54,16 @@ export const users = pgTable("annai_travel_users", {
   proAccessUpdatedAt: timestamp("pro_access_updated_at"),
   preferredLanguage: text("preferred_language").notNull().default("en"),
   homeCurrency: text("home_currency").notNull().default("USD"),
+  citizenship: text("citizenship"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const trips = pgTable("annai_travel_trips", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),
+  origin: text("origin"),
   destination: text("destination").notNull(),
+  tripType: text("trip_type").notNull().default("one_way"),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   notes: text("notes"),
@@ -243,7 +249,7 @@ export const insertCouponCodeSchema = createInsertSchema(couponCodes).omit({
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
-export type TravelerProfile = Pick<User, "id" | "username" | "preferredLanguage" | "homeCurrency">;
+export type TravelerProfile = Pick<User, "id" | "username" | "preferredLanguage" | "homeCurrency" | "citizenship">;
 
 export type Trip = typeof trips.$inferSelect;
 export type InsertTrip = z.infer<typeof insertTripSchema>;

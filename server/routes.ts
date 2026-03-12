@@ -22,6 +22,7 @@ import {
   verifyAppleNotificationPayload,
   verifyGooglePubSubOidcToken,
 } from "./subscription-verification";
+import { resolveCustomsEntry } from "./customs-registry";
 
 const openaiApiKey =
   process.env.OPENAI_API_KEY ?? process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
@@ -73,6 +74,7 @@ function toProfileResponse(user: NonNullable<Express.User> | Awaited<ReturnType<
     username: user!.username,
     preferredLanguage: getUserLanguage(user),
     homeCurrency: user!.homeCurrency ?? "USD",
+    citizenship: user!.citizenship ?? null,
   };
 }
 
@@ -122,6 +124,32 @@ function handleAiError(res: Response, fallbackMessage: string, error: unknown) {
 
 function normalizeCurrencyCode(input?: string | null) {
   return (input ?? "USD").trim().toUpperCase().slice(0, 3) || "USD";
+}
+
+function buildStaticCustomsSummary(entry: {
+  officialName: string;
+  deadline: string;
+  officialSummaryFacts: string[];
+}): string {
+  const prepareItems = entry.officialSummaryFacts
+    .map((fact) => fact.trim())
+    .filter(Boolean)
+    .map((fact) => `- ${fact}`)
+    .join("\n");
+
+  return [
+    "## What it is",
+    `${entry.officialName} is the verified official entry or declaration option Annai found for this trip context.`,
+    "",
+    "## When to do it",
+    entry.deadline,
+    "",
+    "## What to prepare",
+    prepareItems || "- Check the official site for the latest requirements.",
+    "",
+    "## Important caution",
+    "Always confirm the latest eligibility, deadlines, and airport or border instructions on the official government website before departure.",
+  ].join("\n");
 }
 
 
@@ -318,6 +346,7 @@ export async function registerRoutes(
       const updatedUser = await storage.updateUser(req.user!.id, {
         preferredLanguage: input.preferredLanguage ?? req.user!.preferredLanguage ?? "en",
         homeCurrency: normalizeCurrencyCode(input.homeCurrency ?? req.user!.homeCurrency ?? "USD"),
+        citizenship: input.citizenship === undefined ? req.user!.citizenship ?? null : input.citizenship?.trim() || null,
       });
 
       if (!updatedUser) {
@@ -326,6 +355,7 @@ export async function registerRoutes(
 
       req.user!.preferredLanguage = updatedUser.preferredLanguage;
       req.user!.homeCurrency = updatedUser.homeCurrency;
+      req.user!.citizenship = updatedUser.citizenship;
       res.json(toProfileResponse(updatedUser));
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -653,10 +683,11 @@ export async function registerRoutes(
       const entitlements = await getEntitlements(storage, req.user!);
       if (!requireFeature(res, entitlements, "ai_safety")) return;
       const { destination, citizenship } = api.ai.safetyAdvice.input.parse(req.body);
+      const effectiveCitizenship = citizenship?.trim() || req.user!.citizenship || undefined;
       
       const raw = await aiChat([
         { role: "system", content: `You are a travel safety and diplomatic expert. Provide concise advice on areas to avoid, common scams, and general safety. ALSO, if provided with a citizenship, find and include the location and contact information for the nearest embassy or consulate of that country in the destination. Format with clear markdown headings. ${getAiLanguageInstruction(req.user!)}` },
-        { role: "user", content: `What are the safety concerns and embassy information for a ${citizenship || "traveler"} visiting ${destination}?` }
+        { role: "user", content: `What are the safety concerns and embassy information for a ${effectiveCitizenship || "traveler"} visiting ${destination}?` }
       ]);
       const advice = stripThinkTags(raw || "No safety advice available.");
       res.json({ advice });
@@ -813,6 +844,141 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
     }
   });
 
+  app.post(api.ai.customsEntry.path, requireAuth, async (req, res) => {
+    try {
+      const entitlements = await getEntitlements(storage, req.user!);
+      if (!requireFeature(res, entitlements, "ai_safety")) return;
+
+      const { tripId } = api.ai.customsEntry.input.parse(req.body);
+      const trip = await getOwnedTripOr404(req, res, tripId);
+      if (!trip) return;
+
+      const disclaimer =
+        "Always confirm entry requirements with the official government source before travel. Annai only shows verified official links and may not support every destination yet.";
+      const cachePayload = {
+        destination: trip.destination,
+        origin: trip.origin ?? "",
+        tripType: trip.tripType ?? "one_way",
+      };
+
+      await respondWithCachedAi(res, "customs-entry", cachePayload, async () => {
+        const buildSection = async (
+          mode: "destination" | "return",
+          title: string,
+          queryLocation: string | null | undefined,
+        ) => {
+          const normalizedLocation = queryLocation?.trim();
+          if (!normalizedLocation) {
+            return {
+              status: "unavailable" as const,
+              mode,
+              title,
+              queryLocation: "",
+              matchedCountry: null,
+              officialName: null,
+              officialUrl: null,
+              sourceDomain: null,
+              sourceLabel: null,
+              deadline: null,
+              summary:
+                mode === "return"
+                  ? "Add a starting location to this trip so Annai can look up verified return-entry guidance."
+                  : "Add the country name to your destination so Annai can look up verified official customs guidance.",
+            };
+          }
+
+          const registryEntry = resolveCustomsEntry(normalizedLocation);
+          if (!registryEntry) {
+            return {
+              status: "unavailable" as const,
+              mode,
+              title,
+              queryLocation: normalizedLocation,
+              matchedCountry: null,
+              officialName: null,
+              officialUrl: null,
+              sourceDomain: null,
+              sourceLabel: null,
+              deadline: null,
+              summary:
+                mode === "return"
+                  ? "Annai does not have a verified official return-entry form for this origin yet. Verify re-entry steps on the official government arrival or customs website for your origin country."
+                  : "Annai does not have a verified official online customs or arrival form for this destination yet. Verify entry steps on the official government immigration or customs website.",
+            };
+          }
+
+          let summary = buildStaticCustomsSummary(registryEntry);
+          if (openai) {
+            try {
+              const raw = await aiChat([
+                {
+                  role: "system",
+                  content: [
+                    "You help travelers understand official customs and arrival form steps.",
+                    "Use only the official facts provided by the user.",
+                    "Do not invent a website, deadline, exemption, or requirement.",
+                    "Do not mention unofficial or third-party services.",
+                    "Write a short markdown summary with these sections: What it is, When to do it, What to prepare, and Important caution.",
+                    getAiLanguageInstruction(req.user!),
+                  ].join(" "),
+                },
+                {
+                  role: "user",
+                  content: [
+                    `Trip destination: ${trip.destination}`,
+                    `Trip origin: ${trip.origin ?? "not provided"}`,
+                    `Section title: ${title}`,
+                    `Lookup location: ${normalizedLocation}`,
+                    `Matched country: ${registryEntry.countryName}`,
+                    `Official form name: ${registryEntry.officialName}`,
+                    `Official form URL: ${registryEntry.officialUrl}`,
+                    `Official source: ${registryEntry.sourceLabel} (${registryEntry.sourceDomain})`,
+                    `Official timing note: ${registryEntry.deadline}`,
+                    `Verified facts:`,
+                    ...registryEntry.officialSummaryFacts.map((fact) => `- ${fact}`),
+                    "Summarize the official steps for a traveler in a clean mobile-friendly format.",
+                  ].join("\n"),
+                },
+              ]);
+              summary = stripThinkTags(raw || summary) || summary;
+            } catch (error) {
+              console.warn("Customs summary AI fallback used", error);
+            }
+          }
+
+          return {
+            status: "verified" as const,
+            mode,
+            title,
+            queryLocation: normalizedLocation,
+            matchedCountry: registryEntry.countryName,
+            officialName: registryEntry.officialName,
+            officialUrl: registryEntry.officialUrl,
+            sourceDomain: registryEntry.sourceDomain,
+            sourceLabel: registryEntry.sourceLabel,
+            deadline: registryEntry.deadline,
+            summary,
+          };
+        };
+
+        const sections = await Promise.all([
+          buildSection("destination", "Entry to Destination", trip.destination),
+          ...(trip.tripType === "round_trip" ? [buildSection("return", "Return Entry", trip.origin)] : []),
+        ]);
+
+        return {
+          destination: trip.destination,
+          origin: trip.origin ?? null,
+          tripType: trip.tripType as "one_way" | "round_trip",
+          disclaimer,
+          sections,
+        };
+      });
+    } catch (error) {
+      return handleAiError(res, "Failed to fetch customs and entry guidance", error);
+    }
+  });
+
   app.post(api.ai.assistant.path, requireAuth, async (req, res) => {
     try {
       const entitlements = await getEntitlements(storage, req.user!);
@@ -831,6 +997,9 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
               "Answer immediate travel-planning questions with concise, practical guidance.",
               "Use the active trip context when it matters.",
               "If information can change in real life, say the traveler should verify it before booking or departure.",
+              "When you mention a specific restaurant, attraction, hotel, neighborhood, station, or venue, include markdown links to Google Search and Google Maps when helpful.",
+              "Format those links like [Google Search](https://www.google.com/search?q=...) and [Google Maps](https://www.google.com/maps/search/?api=1&query=...).",
+              "For recommendation lists, prefer short bullet points so the response is easy to scan on mobile.",
               getAiLanguageInstruction(req.user!),
             ].join(" "),
           },
@@ -839,7 +1008,7 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
             content: [
               `Trip destination: ${trip.destination}`,
               `Trip dates: ${trip.startDate ? trip.startDate.toISOString().slice(0, 10) : "unknown"} to ${trip.endDate ? trip.endDate.toISOString().slice(0, 10) : "unknown"}`,
-              `Traveler citizenship: ${trip.citizenship ?? "not provided"}`,
+              `Traveler citizenship: ${req.user!.citizenship ?? trip.citizenship ?? "not provided"}`,
               `Trip notes: ${trip.notes ?? "none"}`,
               `Question: ${question}`,
             ].join("\n"),

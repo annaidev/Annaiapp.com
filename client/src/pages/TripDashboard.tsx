@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRoute, Link, useLocation } from "wouter";
 import { format, differenceInDays, isBefore, isAfter } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
@@ -9,8 +9,9 @@ import {
   DollarSign, FileText, CalendarDays, CheckCircle2, Clock, Route,
 } from "lucide-react";
 import { useTrip } from "@/hooks/use-trips";
-import { useCulturalTips, useSafetyAdvice, usePhrases, useTravelAssistant, useTripPlan, useWeather } from "@/hooks/use-ai";
+import { useCulturalTips, useCustomsEntry, useSafetyAdvice, usePhrases, useTravelAssistant, useTripPlan, useWeather } from "@/hooks/use-ai";
 import { NavBar } from "@/components/NavBar";
+import { AiMarkdownCards } from "@/components/AiMarkdownCards";
 import { Button } from "@/components/ui/button";
 import { TripForm } from "@/components/TripForm";
 import { SafetyMap } from "@/components/SafetyMap";
@@ -20,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { api, buildUrl } from "@shared/routes";
+import { getDestinationFallbackArt, getDestinationImageUrl } from "@/lib/destination-art";
 import { useI18n } from "@/lib/i18n";
 
 type TripPlanResult = {
@@ -45,6 +47,26 @@ type TripPlanResult = {
   _seedFingerprint: string | null;
 };
 
+type CustomsEntryResult = {
+  destination: string;
+  origin: string | null;
+  tripType: "one_way" | "round_trip";
+  disclaimer: string;
+  sections: Array<{
+    status: "verified" | "unavailable";
+    mode: "destination" | "return";
+    title: string;
+    queryLocation: string;
+    matchedCountry: string | null;
+    officialName: string | null;
+    officialUrl: string | null;
+    sourceDomain: string | null;
+    sourceLabel: string | null;
+    deadline: string | null;
+    summary: string;
+  }>;
+};
+
 const EXTERNAL_LINKS = [
   { name: "Airbnb", icon: <Home className="h-5 w-5" />, color: "bg-[#FF5A5F]/10 text-[#FF5A5F]", getUrl: (dest: string) => `https://www.airbnb.com/s/${encodeURIComponent(dest)}/homes` },
   { name: "Flights", icon: <Plane className="h-5 w-5" />, color: "bg-blue-500/10 text-blue-600", getUrl: (dest: string) => `https://www.google.com/travel/flights?q=${encodeURIComponent(dest)}` },
@@ -55,9 +77,163 @@ const EXTERNAL_LINKS = [
   { name: "Turo", icon: <Car className="h-5 w-5" />, color: "bg-sky-500/10 text-sky-600", getUrl: (dest: string) => `https://turo.com/us/en/search?searchTerm=${encodeURIComponent(dest)}` },
 ];
 
-function getHeroImage(destination: string) {
-  const city = destination.split(",")[0].trim();
-  return `https://loremflickr.com/1200/400/${encodeURIComponent(city)},travel,landmark`;
+type AiBlock =
+  | { type: "heading"; text: string }
+  | { type: "list"; ordered: boolean; items: string[]; title?: string }
+  | { type: "paragraph"; text: string; title?: string };
+
+function normalizeAiContent(content: string) {
+  return content
+    .replace(/\r\n/g, "\n")
+    .replace(/([^\n])\s+(?=##\s)/g, "$1\n\n")
+    .replace(/(##[^\n]+?)\s+(?=\d+\.\s)/g, "$1\n")
+    .replace(/([^\n])\s+(?=\d+\.\s+\*\*)/g, "$1\n")
+    .replace(/([^\n])\s+(?=[-*•]\s+\*\*)/g, "$1\n")
+    .replace(/\s+-\s+(?=\*\*)/g, "\n- ")
+    .trim();
+}
+
+function renderInlineMarkdown(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g).filter(Boolean);
+
+  return parts.map((part, index) => {
+    const boldMatch = part.match(/^\*\*([^*]+)\*\*$/);
+    if (boldMatch) {
+      return <strong key={`${part}-${index}`} className="font-semibold text-foreground">{boldMatch[1]}</strong>;
+    }
+
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      return (
+        <a
+          key={`${part}-${index}`}
+          href={linkMatch[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-primary underline underline-offset-4"
+        >
+          {linkMatch[1]}
+        </a>
+      );
+    }
+
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
+}
+
+function parseAiBlocks(content: string): AiBlock[] {
+  const normalized = normalizeAiContent(content);
+  if (!normalized) return [];
+
+  return normalized
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .flatMap((block): AiBlock[] => {
+      const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+      if (!lines.length) return [];
+
+      if (lines.length === 1) {
+        const line = lines[0];
+        if (/^#{1,3}\s+/.test(line)) {
+          return [{ type: "heading", text: line.replace(/^#{1,3}\s+/, "").trim() }];
+        }
+      }
+
+      const colonHeadingMatch = lines[0]?.match(/^([A-Za-z][A-Za-z0-9 &/'(),-]{1,80}):$/);
+      const title = colonHeadingMatch?.[1]?.trim();
+      const bodyLines = title ? lines.slice(1) : lines;
+
+      if (bodyLines.length > 0 && bodyLines.every((line) => /^[-*•]\s+/.test(line))) {
+        return [{
+          type: "list",
+          ordered: false,
+          title,
+          items: bodyLines.map((line) => line.replace(/^[-*•]\s+/, "").trim()),
+        }];
+      }
+
+      if (bodyLines.length > 0 && bodyLines.every((line) => /^\d+\.\s+/.test(line))) {
+        return [{
+          type: "list",
+          ordered: true,
+          title,
+          items: bodyLines.map((line) => line.replace(/^\d+\.\s+/, "").trim()),
+        }];
+      }
+
+      if (title) {
+        return [{
+          type: "paragraph",
+          title,
+          text: bodyLines.join(" "),
+        }];
+      }
+
+      if (lines.every((line) => /^[-*•]\s+/.test(line))) {
+        return [{
+          type: "list",
+          ordered: false,
+          items: lines.map((line) => line.replace(/^[-*•]\s+/, "").trim()),
+        }];
+      }
+
+      if (lines.every((line) => /^\d+\.\s+/.test(line))) {
+        return [{
+          type: "list",
+          ordered: true,
+          items: lines.map((line) => line.replace(/^\d+\.\s+/, "").trim()),
+        }];
+      }
+
+      return [{
+        type: "paragraph",
+        text: lines.join(" "),
+      }];
+    });
+}
+
+function AiRichText({ content }: { content: string }) {
+  const blocks = parseAiBlocks(content);
+
+  if (!blocks.length) {
+    return <p className="text-sm text-muted-foreground">No details yet.</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {blocks.map((block, index) => {
+        if (block.type === "heading") {
+          return (
+            <div key={`heading-${index}`} className="pt-1">
+              <h3 className="text-lg font-semibold text-foreground">{block.text}</h3>
+            </div>
+          );
+        }
+
+        if (block.type === "list") {
+          const ListTag = block.ordered ? "ol" : "ul";
+          return (
+            <div key={`list-${index}`} className="rounded-2xl border border-border/60 bg-muted/25 p-4">
+              {block.title && <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-foreground/80">{block.title}</h4>}
+              <ListTag className={`space-y-2 text-sm leading-6 text-muted-foreground ${block.ordered ? "list-decimal pl-5" : "list-disc pl-5"}`}>
+                {block.items.map((item, itemIndex) => (
+                  <li key={`item-${itemIndex}`}>{renderInlineMarkdown(item)}</li>
+                ))}
+              </ListTag>
+            </div>
+          );
+        }
+
+        return (
+          <div key={`paragraph-${index}`} className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+            {block.title && <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-foreground/80">{block.title}</h4>}
+            <p className="text-sm leading-7 text-muted-foreground">{renderInlineMarkdown(block.text)}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function getCountdownText(startDate: Date | string | null, endDate: Date | string | null) {
@@ -86,9 +262,10 @@ export default function TripDashboard() {
   const { t } = useI18n();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "ai">("overview");
-  const [activeAiTool, setActiveAiTool] = useState<"assistant" | "trip-plan" | "tips" | "safety" | "phrases" | "weather" | null>(null);
+  const [activeAiTool, setActiveAiTool] = useState<"assistant" | "trip-plan" | "tips" | "safety" | "phrases" | "weather" | "customs" | null>(null);
   
   const tipsMutation = useCulturalTips();
+  const customsMutation = useCustomsEntry();
   const safetyMutation = useSafetyAdvice();
   const phrasesMutation = usePhrases();
   const weatherMutation = useWeather();
@@ -96,6 +273,7 @@ export default function TripDashboard() {
   const assistantMutation = useTravelAssistant();
   const [assistantQuestion, setAssistantQuestion] = useState("");
   const [assistantMessages, setAssistantMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const aiContentRef = useRef<HTMLDivElement | null>(null);
   const [tripPlanSettings, setTripPlanSettings] = useState<{
     days: number;
     planDepth: "quick" | "detailed";
@@ -108,9 +286,25 @@ export default function TripDashboard() {
 
   const [aiContent, setAiContent] = useState<
     | { type: "tips" | "safety" | "phrases" | "weather"; content: string }
+    | { type: "customs"; content: CustomsEntryResult }
     | { type: "trip-plan"; content: TripPlanResult }
     | null
   >(null);
+
+  useEffect(() => {
+    if (activeTab !== "ai" || !activeAiTool) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      aiContentRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [activeAiTool, activeTab]);
 
   const { data: packingItems, isLoading: packingLoading } = useQuery({
     queryKey: [api.packingLists.listByTrip.path, tripId],
@@ -264,7 +458,7 @@ export default function TripDashboard() {
       setLocation("/pricing");
       return;
     }
-    safetyMutation.mutate({ destination: trip.destination, citizenship: trip.citizenship || undefined }, {
+    safetyMutation.mutate({ destination: trip.destination }, {
       onSuccess: (data) => setAiContent({ type: 'safety', content: data.advice })
     });
   };
@@ -290,6 +484,16 @@ export default function TripDashboard() {
       endDate: trip.endDate ? format(new Date(trip.endDate), 'yyyy-MM-dd') : undefined,
     }, {
       onSuccess: (data) => setAiContent({ type: 'weather', content: data.forecast })
+    });
+  };
+  const handleGetCustoms = () => {
+    setActiveAiTool("customs");
+    if (!entitlements?.enabledFeatures.includes("ai_safety")) {
+      setLocation("/pricing");
+      return;
+    }
+    customsMutation.mutate(tripId, {
+      onSuccess: (data) => setAiContent({ type: "customs", content: data }),
     });
   };
   const handleOpenTripPlan = () => {
@@ -363,6 +567,7 @@ export default function TripDashboard() {
     { key: 'trip-plan', label: t("trip.tripPlan"), icon: <Route className="h-5 w-5 mr-3" />, onClick: handleOpenTripPlan, pending: tripPlanMutation.isPending, activeColor: 'bg-primary text-white shadow-lg' },
     { key: 'safety', label: t("trip.safety"), icon: <ShieldAlert className="h-5 w-5 mr-3" />, onClick: handleGetSafety, pending: safetyMutation.isPending, activeColor: 'bg-destructive text-white shadow-lg' },
     { key: 'tips', label: t("trip.culture"), icon: <Globe className="h-5 w-5 mr-3" />, onClick: handleGetTips, pending: tipsMutation.isPending, activeColor: 'bg-secondary text-white shadow-lg' },
+    { key: 'customs', label: t("trip.customs"), icon: <FileText className="h-5 w-5 mr-3" />, onClick: handleGetCustoms, pending: customsMutation.isPending, activeColor: 'bg-amber-500 text-white shadow-lg' },
     { key: 'phrases', label: t("trip.phrases"), icon: <Languages className="h-5 w-5 mr-3" />, onClick: handleGetPhrases, pending: phrasesMutation.isPending, activeColor: 'bg-accent text-accent-foreground shadow-lg' },
     { key: 'weather', label: t("trip.weather"), icon: <CloudSun className="h-5 w-5 mr-3" />, onClick: handleGetWeather, pending: weatherMutation.isPending, activeColor: 'bg-blue-500 text-white shadow-lg' },
   ];
@@ -372,6 +577,7 @@ export default function TripDashboard() {
     'trip-plan': <Route className="text-primary" />,
     tips: <Globe className="text-secondary" />,
     safety: <ShieldAlert className="text-destructive" />,
+    customs: <FileText className="text-amber-500" />,
     phrases: <Languages className="text-accent" />,
     weather: <CloudSun className="text-blue-500" />,
   };
@@ -380,11 +586,13 @@ export default function TripDashboard() {
     'trip-plan': t("trip.tripPlan"),
     tips: t("trip.culture"),
     safety: t("trip.safety"),
+    customs: t("trip.customs"),
     phrases: t("trip.phrases"),
     weather: t("trip.weather"),
   };
   const isAiLoading =
     tipsMutation.isPending ||
+    customsMutation.isPending ||
     safetyMutation.isPending ||
     phrasesMutation.isPending ||
     weatherMutation.isPending ||
@@ -400,7 +608,15 @@ export default function TripDashboard() {
 
         <div className="relative rounded-3xl overflow-hidden mb-8">
           <div className="absolute inset-0 z-0">
-            <img src={getHeroImage(trip.destination)} alt={trip.destination} className="w-full h-full object-cover" />
+            <img
+              src={getDestinationImageUrl(trip.destination, 1200, 400)}
+              alt={trip.destination}
+              className="w-full h-full object-cover"
+              onError={(event) => {
+                event.currentTarget.onerror = null;
+                event.currentTarget.src = getDestinationFallbackArt(trip.destination, 1200, 400);
+              }}
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-black/20" />
           </div>
           <div className="relative z-10 p-8 md:p-12">
@@ -420,6 +636,17 @@ export default function TripDashboard() {
                 <h1 className="text-4xl md:text-6xl font-bold text-white mb-4 drop-shadow-lg" data-testid="text-destination">
                   {trip.destination}
                 </h1>
+                {trip.origin && (
+                  <div className="mb-4 flex flex-wrap items-center gap-3 text-sm font-medium text-white/85">
+                    <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 backdrop-blur-sm">
+                      <MapPin className="h-4 w-4" />
+                      From {trip.origin}
+                    </span>
+                    <span className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 backdrop-blur-sm">
+                      {trip.tripType === "round_trip" ? "Round trip" : "One way"}
+                    </span>
+                  </div>
+                )}
                 {(trip.startDate || trip.endDate) && (
                   <div className="flex items-center text-xl text-white/80 font-medium">
                     <Calendar className="h-6 w-6 mr-3 opacity-50" />
@@ -593,7 +820,7 @@ export default function TripDashboard() {
                 ))}
               </div>
               
-              <div className="md:col-span-2 space-y-8">
+              <div ref={aiContentRef} className="md:col-span-2 space-y-8">
                 {!activeAiTool ? (
                   <div className="h-full min-h-[300px] border-2 border-dashed border-border rounded-3xl flex flex-col items-center justify-center p-8 text-center bg-card/50">
                     <Sparkles className="h-16 w-16 text-muted-foreground/30 mb-4" />
@@ -625,19 +852,25 @@ export default function TripDashboard() {
                       {assistantMutation.isPending ? "Loading..." : t("trip.assistantSend")}
                     </Button>
                     <div className="space-y-3 rounded-2xl bg-muted/40 p-4">
-                      {assistantMessages.length === 0 && !assistantMutation.isPending ? (
-                        <p className="text-sm text-muted-foreground">{t("trip.assistantEmpty")}</p>
-                      ) : (
+                      {!(assistantMessages.length === 0 && !assistantMutation.isPending) && (
                         assistantMessages.map((message, index) => (
                           <div
                             key={`${message.role}-${index}`}
                             className={`rounded-2xl px-4 py-3 text-sm ${
                               message.role === "user"
                                 ? "ml-auto max-w-[85%] bg-primary text-primary-foreground"
-                                : "max-w-[90%] bg-background text-muted-foreground"
+                                : "max-w-[95%] border border-border/60 bg-background text-muted-foreground shadow-sm"
                             }`}
                           >
-                            {message.content}
+                            {message.role === "assistant" ? (
+                              <AiMarkdownCards
+                                content={message.content}
+                                autoLinkPlaces
+                                destinationContext={trip.destination}
+                              />
+                            ) : (
+                              message.content
+                            )}
                           </div>
                         ))
                       )}
@@ -834,6 +1067,89 @@ export default function TripDashboard() {
                       </div>
                     )}
                   </div>
+                ) : activeAiTool === "customs" ? (
+                  <div className="bg-card rounded-3xl p-8 border border-border/50 shadow-xl min-h-[300px]">
+                    {customsMutation.isPending ? (
+                      <div className="flex flex-col items-center justify-center h-full space-y-4 py-20 text-muted-foreground">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                        <p className="animate-pulse">AI is working...</p>
+                      </div>
+                    ) : aiContent?.type === "customs" ? (
+                      <div className="space-y-6">
+                        <div>
+                          <h2 className="text-2xl font-bold flex items-center gap-2">
+                            {aiIconMap.customs}
+                            {aiTitleMap.customs}
+                          </h2>
+                          <p className="mt-2 text-sm text-muted-foreground">{t("trip.customsBody")}</p>
+                        </div>
+
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
+                          {aiContent.content.disclaimer}
+                        </div>
+
+                        <div className="space-y-6">
+                          {aiContent.content.sections.map((section) => (
+                            <div key={section.mode} className="space-y-4 rounded-3xl border border-border/50 bg-muted/10 p-5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-lg font-semibold text-foreground">{section.title}</h3>
+                                {section.queryLocation ? (
+                                  <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                                    {section.queryLocation}
+                                  </span>
+                                ) : null}
+                              </div>
+
+                              {section.status === "verified" ? (
+                                <>
+                                  <div className="grid gap-4 md:grid-cols-3">
+                                    <div className="rounded-2xl border border-border/60 bg-card p-4">
+                                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("trip.customsOfficial")}</h4>
+                                      <p className="mt-2 font-semibold text-foreground">{section.officialName}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-border/60 bg-card p-4">
+                                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("trip.customsSource")}</h4>
+                                      <p className="mt-2 font-semibold text-foreground">{section.sourceDomain}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-border/60 bg-card p-4">
+                                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("trip.customsDeadline")}</h4>
+                                      <p className="mt-2 font-semibold text-foreground">{section.deadline}</p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-wrap gap-3">
+                                    <Button asChild className="rounded-2xl" data-testid={`button-customs-open-form-${section.mode}`}>
+                                      <a href={section.officialUrl ?? "#"} target="_blank" rel="noopener noreferrer">
+                                        {t("trip.customsOpenForm")}
+                                      </a>
+                                    </Button>
+                                    <a
+                                      href={section.officialUrl ?? "#"}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center text-sm font-medium text-primary underline underline-offset-4"
+                                    >
+                                      {section.sourceLabel}
+                                    </a>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">
+                                  {section.summary || t("trip.customsUnavailable")}
+                                </div>
+                              )}
+
+                              {section.status === "verified" ? <AiMarkdownCards content={section.summary} /> : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl bg-muted/40 p-6 text-sm text-muted-foreground">
+                        Select the tool again to generate fresh content for this panel.
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="bg-card rounded-3xl p-8 border border-border/50 shadow-xl min-h-[300px]">
                     {isAiLoading ? (
@@ -848,11 +1164,9 @@ export default function TripDashboard() {
                           {activeAiTool && aiTitleMap[activeAiTool]}
                         </h2>
                         {aiContent && aiContent.type === activeAiTool ? (
-                          <div className="prose dark:prose-invert max-w-none text-muted-foreground">
-                            {typeof aiContent.content === 'string' && aiContent.content.split('\n').map((para, i) => (
-                              <p key={i} className="mb-4 leading-relaxed text-lg">{para}</p>
-                            ))}
-                          </div>
+                          typeof aiContent.content === "string" ? (
+                            <AiMarkdownCards content={aiContent.content} />
+                          ) : null
                         ) : (
                           <div className="rounded-2xl bg-muted/40 p-6 text-sm text-muted-foreground">
                             Select the tool again to generate fresh content for this panel.

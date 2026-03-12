@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useId, useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { useCreateTrip, useUpdateTrip } from "@/hooks/use-trips";
+import { useTrips } from "@/hooks/use-trips";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trip } from "@shared/schema";
+import { buildLocationOptions, filterLocationOptions } from "@/lib/location-suggestions";
 
 interface TripFormProps {
   open: boolean;
@@ -17,24 +21,46 @@ export function TripForm({ open, onOpenChange, trip }: TripFormProps) {
   const isEdit = !!trip;
   const createMutation = useCreateTrip();
   const updateMutation = useUpdateTrip();
+  const { data: trips } = useTrips();
+  const [, setLocation] = useLocation();
+  const originListId = useId();
+  const destinationListId = useId();
 
   const [formData, setFormData] = useState({
+    origin: trip?.origin || "",
     destination: trip?.destination || "",
+    tripType: trip?.tripType || "one_way",
     startDate: trip?.startDate ? new Date(trip.startDate).toISOString().split("T")[0] : "",
     endDate: trip?.endDate ? new Date(trip.endDate).toISOString().split("T")[0] : "",
     notes: trip?.notes || "",
-    citizenship: trip?.citizenship || "",
   });
+
+  const locationOptions = useMemo(
+    () =>
+      buildLocationOptions(
+        (trips ?? []).flatMap((existingTrip) => [existingTrip.origin, existingTrip.destination]),
+      ),
+    [trips],
+  );
+  const originOptions = useMemo(
+    () => filterLocationOptions(locationOptions, formData.origin),
+    [locationOptions, formData.origin],
+  );
+  const destinationOptions = useMemo(
+    () => filterLocationOptions(locationOptions, formData.destination),
+    [locationOptions, formData.destination],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     const payload = {
-      destination: formData.destination,
+      origin: formData.origin.trim() || null,
+      destination: formData.destination.trim(),
+      tripType: formData.tripType as "one_way" | "round_trip",
       startDate: formData.startDate ? new Date(formData.startDate) : undefined,
       endDate: formData.endDate ? new Date(formData.endDate) : undefined,
       notes: formData.notes,
-      citizenship: formData.citizenship,
     };
 
     if (isEdit && trip) {
@@ -43,7 +69,12 @@ export function TripForm({ open, onOpenChange, trip }: TripFormProps) {
         { onSuccess: () => onOpenChange(false) }
       );
     } else {
-      createMutation.mutate(payload, { onSuccess: () => onOpenChange(false) });
+      createMutation.mutate(payload, {
+        onSuccess: (createdTrip) => {
+          onOpenChange(false);
+          setLocation(`/trips/${createdTrip.id}`);
+        },
+      });
     }
   };
 
@@ -55,21 +86,62 @@ export function TripForm({ open, onOpenChange, trip }: TripFormProps) {
         <DialogHeader>
           <DialogTitle className="text-2xl">{isEdit ? "Edit Trip" : "Plan a New Trip"}</DialogTitle>
           <DialogDescription>
-            {isEdit ? "Update your travel details." : "Enter the destination and dates for your next adventure."}
+            {isEdit ? "Update your travel details." : "Enter where you are starting from, where you are going, and what kind of trip this is."}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6 mt-4">
           <div className="space-y-2">
+            <Label htmlFor="origin" className="text-foreground">Starting Location</Label>
+            <Input
+              id="origin"
+              required
+              list={originListId}
+              spellCheck
+              autoComplete="on"
+              placeholder="e.g. Dallas, TX, United States"
+              value={formData.origin}
+              onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
+              className="rounded-xl h-12 bg-muted/50 border-transparent focus:border-primary focus:bg-background transition-colors"
+            />
+            <datalist id={originListId}>
+              {originOptions.map((option) => (
+                <option key={`origin-${option}`} value={option} />
+              ))}
+            </datalist>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="destination" className="text-foreground">Destination</Label>
             <Input
               id="destination"
               required
+              list={destinationListId}
+              spellCheck
+              autoComplete="on"
               placeholder="e.g. Kyoto, Japan"
               value={formData.destination}
               onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
               className="rounded-xl h-12 bg-muted/50 border-transparent focus:border-primary focus:bg-background transition-colors"
             />
+            <datalist id={destinationListId}>
+              {destinationOptions.map((option) => (
+                <option key={`destination-${option}`} value={option} />
+              ))}
+            </datalist>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-foreground">Trip Type</Label>
+            <Select value={formData.tripType} onValueChange={(value) => setFormData({ ...formData, tripType: value })}>
+              <SelectTrigger className="rounded-xl h-12 bg-muted/50 border-transparent focus:bg-background transition-colors">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="one_way">One Way</SelectItem>
+                <SelectItem value="round_trip">Round Trip</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -95,27 +167,18 @@ export function TripForm({ open, onOpenChange, trip }: TripFormProps) {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="citizenship" className="text-foreground">Citizenship (for Embassy info)</Label>
-            <Input
-              id="citizenship"
-              placeholder="e.g. United States, United Kingdom"
-              value={formData.citizenship}
-              onChange={(e) => setFormData({ ...formData, citizenship: e.target.value })}
-              className="rounded-xl h-12 bg-muted/50 border-transparent focus:border-primary focus:bg-background transition-colors"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes" className="text-foreground">Travel Notes (Optional)</Label>
-            <Textarea
-              id="notes"
-              placeholder="Flight details, confirmation numbers, etc."
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="rounded-xl min-h-[100px] bg-muted/50 border-transparent focus:border-primary focus:bg-background transition-colors resize-none"
-            />
-          </div>
+          {isEdit && (
+            <div className="space-y-2">
+              <Label htmlFor="notes" className="text-foreground">Travel Notes (Optional)</Label>
+              <Textarea
+                id="notes"
+                placeholder="Flight details, confirmation numbers, etc."
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="rounded-xl min-h-[100px] bg-muted/50 border-transparent focus:border-primary focus:bg-background transition-colors resize-none"
+              />
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
             <Button
@@ -128,7 +191,7 @@ export function TripForm({ open, onOpenChange, trip }: TripFormProps) {
             </Button>
             <Button
               type="submit"
-              disabled={isPending || !formData.destination}
+              disabled={isPending || !formData.destination.trim() || !formData.origin.trim()}
               className="rounded-xl px-8 h-12 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 transition-all"
             >
               {isPending ? "Saving..." : isEdit ? "Save Changes" : "Create Trip"}

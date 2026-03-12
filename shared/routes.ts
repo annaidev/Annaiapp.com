@@ -10,6 +10,7 @@ import {
   featureKeyValues,
   subscriptionStatusValues,
   supportedLanguageValues,
+  tripTypeValues,
   trips,
   packingLists,
   budgetItems,
@@ -73,6 +74,7 @@ const profileSchema = z.object({
   username: z.string(),
   preferredLanguage: z.enum(supportedLanguageValues),
   homeCurrency: z.string(),
+  citizenship: z.string().nullable(),
 });
 
 const proStatusSchema = z.object({
@@ -87,6 +89,19 @@ const proStatusSchema = z.object({
     detail: z.string(),
   }),
   apps: z.array(moduleSchema.extend({ url: z.string().nullable() })),
+});
+
+const tripSchema = z.custom<typeof trips.$inferSelect>();
+
+const tripInputSchema = z.object({
+  destination: z.string().min(1).max(160),
+  origin: z.string().max(160).nullable().optional(),
+  tripType: z.enum(tripTypeValues).default("one_way"),
+  startDate: z.date().nullable().optional(),
+  endDate: z.date().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  citizenship: z.string().nullable().optional(),
+  userId: z.number().int().positive().nullable().optional(),
 });
 
 const tripPlanSchema = z.object({
@@ -133,6 +148,28 @@ const bookingImportPreviewSchema = z.object({
   ),
 });
 
+const customsEntrySectionSchema = z.object({
+  status: z.enum(["verified", "unavailable"]),
+  mode: z.enum(["destination", "return"]),
+  title: z.string(),
+  queryLocation: z.string(),
+  matchedCountry: z.string().nullable(),
+  officialName: z.string().nullable(),
+  officialUrl: z.string().nullable(),
+  sourceDomain: z.string().nullable(),
+  sourceLabel: z.string().nullable(),
+  deadline: z.string().nullable(),
+  summary: z.string(),
+});
+
+const customsEntrySchema = z.object({
+  destination: z.string(),
+  origin: z.string().nullable(),
+  tripType: z.enum(tripTypeValues),
+  disclaimer: z.string(),
+  sections: z.array(customsEntrySectionSchema),
+});
+
 const couponRedeemSchema = z.object({
   redeemedAt: z.string(),
   expiresAt: z.string(),
@@ -166,6 +203,7 @@ export const api = {
       input: z.object({
         preferredLanguage: z.enum(supportedLanguageValues).optional(),
         homeCurrency: z.string().min(3).max(3).optional(),
+        citizenship: z.string().max(120).nullable().optional(),
       }),
       responses: { 200: profileSchema, 400: errorSchemas.validation, 401: errorSchemas.unauthorized },
     },
@@ -212,10 +250,10 @@ export const api = {
     },
   },
   trips: {
-    list: { method: 'GET' as const, path: '/api/trips' as const, responses: { 200: z.array(z.custom<typeof trips.$inferSelect>()) } },
-    get: { method: 'GET' as const, path: '/api/trips/:id' as const, responses: { 200: z.custom<typeof trips.$inferSelect>(), 404: errorSchemas.notFound } },
-    create: { method: 'POST' as const, path: '/api/trips' as const, input: insertTripSchema, responses: { 201: z.custom<typeof trips.$inferSelect>(), 400: errorSchemas.validation } },
-    update: { method: 'PUT' as const, path: '/api/trips/:id' as const, input: insertTripSchema.partial(), responses: { 200: z.custom<typeof trips.$inferSelect>(), 400: errorSchemas.validation, 404: errorSchemas.notFound } },
+    list: { method: 'GET' as const, path: '/api/trips' as const, responses: { 200: z.array(tripSchema) } },
+    get: { method: 'GET' as const, path: '/api/trips/:id' as const, responses: { 200: tripSchema, 404: errorSchemas.notFound } },
+    create: { method: 'POST' as const, path: '/api/trips' as const, input: tripInputSchema, responses: { 201: tripSchema, 400: errorSchemas.validation } },
+    update: { method: 'PUT' as const, path: '/api/trips/:id' as const, input: tripInputSchema.partial(), responses: { 200: tripSchema, 400: errorSchemas.validation, 404: errorSchemas.notFound } },
     delete: { method: 'DELETE' as const, path: '/api/trips/:id' as const, responses: { 204: z.void(), 404: errorSchemas.notFound } },
   },
   packingLists: {
@@ -282,6 +320,12 @@ export const api = {
       method: 'POST' as const, path: '/api/ai/weather' as const,
       input: z.object({ destination: z.string(), startDate: z.string().optional(), endDate: z.string().optional() }),
       responses: { 200: z.object({ forecast: z.string() }), 403: errorSchemas.upgradeRequired },
+    },
+    customsEntry: {
+      method: "POST" as const,
+      path: "/api/ai/customs-entry" as const,
+      input: z.object({ tripId: z.number().int().positive() }),
+      responses: { 200: customsEntrySchema, 403: errorSchemas.upgradeRequired },
     },
     assistant: {
       method: "POST" as const,

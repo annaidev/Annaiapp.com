@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { storage } from "./storage";
 
-export type AiCacheFeature = "packing-list" | "trip-plan" | "cultural-tips" | "phrases";
+export type AiCacheFeature = "packing-list" | "trip-plan" | "cultural-tips" | "phrases" | "customs-entry";
 
 export type AiCacheConfig = {
   feature: AiCacheFeature;
@@ -20,6 +20,7 @@ const cacheConfigs: Record<AiCacheFeature, AiCacheConfig> = {
   "trip-plan": { feature: "trip-plan", ttlHours: 24 * 30, promptVersion: "v1" },
   "cultural-tips": { feature: "cultural-tips", ttlHours: 24 * 45, promptVersion: "v1" },
   phrases: { feature: "phrases", ttlHours: 24 * 45, promptVersion: "v1" },
+  "customs-entry": { feature: "customs-entry", ttlHours: 24 * 14, promptVersion: "v1" },
 };
 
 export function normalizeDestination(destination: string): string {

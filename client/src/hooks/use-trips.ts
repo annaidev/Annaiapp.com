@@ -33,7 +33,9 @@ export function useCreateTrip() {
       const optimisticTrip: TripResponse = {
         id: -Date.now(),
         userId: null,
+        origin: draftTrip.origin ?? null,
         destination: draftTrip.destination,
+        tripType: draftTrip.tripType ?? "one_way",
         startDate: draftTrip.startDate ?? null,
         endDate: draftTrip.endDate ?? null,
         notes: draftTrip.notes ?? null,
