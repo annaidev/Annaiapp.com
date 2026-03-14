@@ -26,7 +26,7 @@ const cacheConfigs: Record<AiCacheFeature, AiCacheConfig> = {
   "packing-list": { feature: "packing-list", ttlHours: 24 * 30, promptVersion: "v1" },
   "trip-plan": { feature: "trip-plan", ttlHours: 24 * 30, promptVersion: "v1" },
   "cultural-tips": { feature: "cultural-tips", ttlHours: 24 * 14, promptVersion: "v1" },
-  "safety-advice": { feature: "safety-advice", ttlHours: 24 * 3, promptVersion: "v1" },
+  "safety-advice": { feature: "safety-advice", ttlHours: 24 * 3, promptVersion: "v2" },
   phrases: { feature: "phrases", ttlHours: 24 * 14, promptVersion: "v1" },
   weather: { feature: "weather", ttlHours: 24, promptVersion: "v1" },
   "customs-entry": { feature: "customs-entry", ttlHours: 24 * 3, promptVersion: "v1" },

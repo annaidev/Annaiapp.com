@@ -88,6 +88,16 @@ function getAiLanguageInstruction(user: NonNullable<Express.User> | Awaited<Retu
   return `Respond in ${getLanguageName(language)}.`;
 }
 
+function resolveCountryCode(value?: string | null): string | null {
+  if (!value?.trim()) return null;
+  return resolveCustomsEntry(value)?.countryCode ?? null;
+}
+
+function resolveCountryName(value?: string | null): string | null {
+  if (!value?.trim()) return null;
+  return resolveCustomsEntry(value)?.countryName ?? null;
+}
+
 function toProfileResponse(user: NonNullable<Express.User> | Awaited<ReturnType<typeof storage.getUser>>) {
   return {
     id: user!.id,
@@ -488,6 +498,9 @@ function shouldTreatAsAddRequest(
 ): boolean {
   if (isItineraryAddRequest(question)) return true;
   const normalized = question.toLowerCase();
+  const looksLikeDiscoveryQuestion =
+    /(top|best|recommend|suggest|ideas|places?\s+to\s+visit|things\s+to\s+do)/.test(normalized) &&
+    !/\badd\b/.test(normalized);
   const recentAssistantAskedToAdd = messages
     .slice(-6)
     .some(
@@ -495,7 +508,14 @@ function shouldTreatAsAddRequest(
         message.role === "assistant" &&
         /would you like me to add any of these to your itinerary/i.test(message.content),
     );
-  if (recentAssistantAskedToAdd && /(add|yes|please|that|number|option|spot|place|#\d+)/.test(normalized)) {
+  if (looksLikeDiscoveryQuestion) {
+    return false;
+  }
+  const explicitAddSelection =
+    /\b(add|yes|please|number|option|item|first|second|third|fourth|fifth)\b/.test(normalized) ||
+    /(?:that|this)\s+one/.test(normalized) ||
+    /#\s*\d+/.test(normalized);
+  if (recentAssistantAskedToAdd && explicitAddSelection) {
     return true;
   }
   if (!isDayTimeFollowUp(question)) return false;
@@ -1243,17 +1263,52 @@ export async function registerRoutes(
       if (!requireFeature(res, entitlements, "ai_safety")) return;
       const { destination, citizenship } = api.ai.safetyAdvice.input.parse(req.body);
       const effectiveCitizenship = citizenship?.trim() || req.user!.citizenship || undefined;
+      const destinationCountryCode = resolveCountryCode(destination);
+      const destinationCountryName = resolveCountryName(destination) ?? destination;
+      const citizenshipCountryCode = resolveCountryCode(effectiveCitizenship);
+      const isDomesticTrip =
+        Boolean(destinationCountryCode) &&
+        Boolean(citizenshipCountryCode) &&
+        destinationCountryCode === citizenshipCountryCode;
       const cachePayload = buildSafetyAdviceCacheInput({
         destination,
         citizenship: effectiveCitizenship,
       });
 
       await respondWithCachedAi(res, "safety-advice", cachePayload, async () => {
-        const raw = await aiChat([
-          { role: "system", content: `You are a travel safety and diplomatic expert. Provide concise advice on areas to avoid, common scams, and general safety. ALSO, if provided with a citizenship, find and include the location and contact information for the nearest embassy or consulate of that country in the destination. Format with clear markdown headings. ${getAiLanguageInstruction(req.user!)}` },
-          { role: "user", content: `What are the safety concerns and embassy information for a ${effectiveCitizenship || "traveler"} visiting ${destination}?` }
-        ]);
-        const advice = stripThinkTags(raw || "No safety advice available.");
+        let raw: string;
+        if (isDomesticTrip) {
+          raw = await aiChat([
+            {
+              role: "system",
+              content: `You are a travel safety expert. Provide concise guidance for: areas to avoid, common scams, and general safety. Do NOT provide embassy/consulate listings for domestic travel. Include a short 'Domestic Travel Note' section that says embassy services are generally not needed for citizens traveling within their own country, and point them to local emergency services. Format with clear markdown headings. ${getAiLanguageInstruction(req.user!)}`,
+            },
+            {
+              role: "user",
+              content: `What are the safety concerns for a ${effectiveCitizenship || "traveler"} visiting ${destination}?`,
+            },
+          ]);
+        } else {
+          raw = await aiChat([
+            {
+              role: "system",
+              content: `You are a travel safety and diplomatic expert. Provide concise advice on areas to avoid, common scams, and general safety. ALSO, if provided with a citizenship, find and include the location and contact information for the nearest embassy or consulate of that country in the destination. Format with clear markdown headings. ${getAiLanguageInstruction(req.user!)}`,
+            },
+            {
+              role: "user",
+              content: `What are the safety concerns and embassy information for a ${effectiveCitizenship || "traveler"} visiting ${destination}?`,
+            },
+          ]);
+        }
+
+        let advice = stripThinkTags(raw || "No safety advice available.");
+        if (isDomesticTrip && !/domestic travel note/i.test(advice)) {
+          const emergencyHint =
+            destinationCountryCode === "US"
+              ? "If you need urgent help, call 911."
+              : "If you need urgent help, contact local emergency services.";
+          advice = `${advice}\n\n## Domestic Travel Note\nYou are traveling within ${destinationCountryName}, so embassy or consulate support is generally not needed for citizens of that same country. ${emergencyHint}`;
+        }
         return { advice };
       });
     } catch (error) {
@@ -1741,6 +1796,7 @@ Rules:
       let createdItineraryItem: Awaited<ReturnType<typeof storage.createItineraryItem>> | null = null;
       const addRequested = shouldTreatAsAddRequest(question, messages);
       let pendingAction =
+        addRequested &&
         parsed.pendingAction &&
         parsed.pendingAction.type === "add_to_itinerary" &&
         parsed.pendingAction.title?.trim()
