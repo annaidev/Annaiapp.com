@@ -7,7 +7,6 @@ import { Loader2, Globe, MapPin, Plane, Eye, EyeOff, ArrowLeft } from "lucide-re
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
-import { useLocation } from "wouter";
 import {
   Select,
   SelectContent,
@@ -29,7 +28,6 @@ type AuthView = "login" | "register" | "forgot-username" | "forgot-answer" | "fo
 
 export default function AuthPage() {
   const { t, language, setLanguage, languageOptions } = useI18n();
-  const [, setLocation] = useLocation();
   const [view, setView] = useState<AuthView>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -55,7 +53,7 @@ export default function AuthPage() {
         { username, password },
         {
           onSuccess: () => {
-            setLocation("/");
+            window.location.assign("/");
           },
           onError: (error: any) => {
             toast({
@@ -79,7 +77,7 @@ export default function AuthPage() {
         { username, password, securityQuestion, securityAnswer: securityAnswer.trim() },
         {
           onSuccess: () => {
-            setLocation("/");
+            window.location.assign("/");
           },
           onError: (error: any) => {
             toast({
