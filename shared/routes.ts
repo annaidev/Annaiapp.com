@@ -257,7 +257,6 @@ export const api = {
       method: "POST" as const,
       path: "/api/account/change-password" as const,
       input: z.object({
-        currentPassword: z.string().min(1),
         newPassword: z.string().min(10),
       }),
       responses: {

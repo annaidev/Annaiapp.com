@@ -467,10 +467,10 @@ export function setupAuth(app: Express) {
 
   app.post("/api/account/change-password", requireAuth, changePasswordRateLimit, async (req: Request, res: Response) => {
     try {
-      const { currentPassword, newPassword } = req.body;
+      const { newPassword } = req.body;
 
-      if (!currentPassword || !newPassword) {
-        return res.status(400).json({ message: "Current password and new password are required" });
+      if (!newPassword) {
+        return res.status(400).json({ message: "New password is required" });
       }
 
       if ((newPassword as string).length < 10) {
@@ -480,11 +480,6 @@ export function setupAuth(app: Express) {
       const user = await storage.getUser(req.user!.id);
       if (!user) {
         return res.status(401).json({ message: "Authentication required" });
-      }
-
-      const isValidCurrentPassword = await comparePasswords(currentPassword as string, user.password);
-      if (!isValidCurrentPassword) {
-        return res.status(401).json({ message: "Current password is incorrect" });
       }
 
       const isSamePassword = await comparePasswords(newPassword as string, user.password);

@@ -39,9 +39,9 @@ export default function AccountPage() {
   const [homeCurrency, setHomeCurrency] = useState("USD");
   const [citizenship, setCitizenship] = useState("");
   const [couponCode, setCouponCode] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [changePasswordDialogOpen, setChangePasswordDialogOpen] = useState(false);
   const [deletePhrase, setDeletePhrase] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -103,15 +103,14 @@ export default function AccountPage() {
   const changePasswordMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest(api.account.changePassword.method, api.account.changePassword.path, {
-        currentPassword,
         newPassword,
       });
       return api.account.changePassword.responses[200].parse(await res.json());
     },
     onSuccess: () => {
-      setCurrentPassword("");
       setNewPassword("");
       setConfirmNewPassword("");
+      setChangePasswordDialogOpen(false);
       toast({
         title: "Password updated",
         description: "Your account password has been changed.",
@@ -128,7 +127,6 @@ export default function AccountPage() {
 
   const canDeleteAccount = deletePhrase.trim() === "DELETE";
   const isPasswordFormValid =
-    Boolean(currentPassword.trim()) &&
     newPassword.length >= 10 &&
     confirmNewPassword === newPassword;
 
@@ -276,6 +274,10 @@ export default function AccountPage() {
                   onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
                   className="rounded-2xl"
                   placeholder="Enter coupon code"
+                  autoComplete="off"
+                  name="coupon-code"
+                  autoCorrect="off"
+                  spellCheck={false}
                   data-testid="input-coupon-code"
                 />
                 <Button
@@ -300,56 +302,13 @@ export default function AccountPage() {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Current password</label>
-                  <Input
-                    type="password"
-                    value={currentPassword}
-                    onChange={(event) => setCurrentPassword(event.target.value)}
-                    className="rounded-2xl"
-                    placeholder="Enter current password"
-                    data-testid="input-current-password"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">New password</label>
-                  <Input
-                    type="password"
-                    value={newPassword}
-                    onChange={(event) => setNewPassword(event.target.value)}
-                    className="rounded-2xl"
-                    placeholder="At least 10 characters"
-                    data-testid="input-new-password-account"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Confirm new password</label>
-                  <Input
-                    type="password"
-                    value={confirmNewPassword}
-                    onChange={(event) => setConfirmNewPassword(event.target.value)}
-                    className="rounded-2xl"
-                    placeholder="Re-enter new password"
-                    data-testid="input-confirm-password-account"
-                  />
-                </div>
-
-                {confirmNewPassword.length > 0 && confirmNewPassword !== newPassword && (
-                  <p className="text-sm text-destructive">New password and confirmation do not match.</p>
-                )}
-
-                <Button
-                  className="w-full rounded-2xl"
-                  disabled={changePasswordMutation.isPending || !isPasswordFormValid}
-                  onClick={() => changePasswordMutation.mutate()}
-                  data-testid="button-change-password"
-                >
-                  {changePasswordMutation.isPending ? "Updating..." : "Change Password"}
-                </Button>
-              </div>
+              <Button
+                className="w-full rounded-2xl"
+                onClick={() => setChangePasswordDialogOpen(true)}
+                data-testid="button-open-change-password"
+              >
+                Change Password
+              </Button>
             </Card>
 
             <Card className="rounded-[2rem] border border-destructive/30 p-8 shadow-sm">
@@ -413,6 +372,71 @@ export default function AccountPage() {
           </a>
         </div>
       </main>
+
+      <AlertDialog open={changePasswordDialogOpen} onOpenChange={setChangePasswordDialogOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change password</AlertDialogTitle>
+            <AlertDialogDescription>
+              Enter a new password for your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-muted-foreground">New password</label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                className="rounded-2xl"
+                placeholder="At least 10 characters"
+                autoComplete="new-password"
+                data-testid="input-new-password-account"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Confirm new password</label>
+              <Input
+                type="password"
+                value={confirmNewPassword}
+                onChange={(event) => setConfirmNewPassword(event.target.value)}
+                className="rounded-2xl"
+                placeholder="Re-enter new password"
+                autoComplete="new-password"
+                data-testid="input-confirm-password-account"
+              />
+            </div>
+
+            {confirmNewPassword.length > 0 && confirmNewPassword !== newPassword && (
+              <p className="text-sm text-destructive">New password and confirmation do not match.</p>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className="rounded-2xl"
+              onClick={() => {
+                setNewPassword("");
+                setConfirmNewPassword("");
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-2xl"
+              disabled={changePasswordMutation.isPending || !isPasswordFormValid}
+              onClick={(event) => {
+                event.preventDefault();
+                changePasswordMutation.mutate();
+              }}
+            >
+              {changePasswordMutation.isPending ? "Updating..." : "Update Password"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent className="rounded-3xl">
