@@ -178,8 +178,16 @@ export async function ensureDatabaseSchema(): Promise<void> {
       label TEXT NOT NULL,
       reference_number TEXT,
       notes TEXT,
+      attachment_name TEXT,
+      attachment_data_url TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE annai_travel_documents
+    ADD COLUMN IF NOT EXISTS attachment_name TEXT,
+    ADD COLUMN IF NOT EXISTS attachment_data_url TEXT;
   `);
 
   await pool.query(`

@@ -975,6 +975,8 @@ export class MemStorage implements IStorage {
       label: doc.label,
       referenceNumber: doc.referenceNumber ?? null,
       notes: doc.notes ?? null,
+      attachmentName: doc.attachmentName ?? null,
+      attachmentDataUrl: doc.attachmentDataUrl ?? null,
       createdAt: new Date(),
     };
     this.docsData.push(created);

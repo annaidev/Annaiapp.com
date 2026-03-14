@@ -2,6 +2,20 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import type { InsertTravelDocument } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+
+function parseApiError(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+  const text = error.message.includes(":")
+    ? error.message.split(":").slice(1).join(":").trim()
+    : error.message;
+  try {
+    const parsed = JSON.parse(text);
+    return parsed?.message ?? text;
+  } catch {
+    return text || fallback;
+  }
+}
 
 export function useDocuments(tripId: number) {
   return useQuery({
@@ -24,13 +38,7 @@ export function useCreateDocument() {
     mutationFn: async (data: InsertTravelDocument) => {
       const url = buildUrl(api.travelDocuments.create.path, { tripId: data.tripId });
       const { tripId, ...body } = data;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to create document");
+      const res = await apiRequest("POST", url, body);
       return res.json();
     },
     onSuccess: (_, variables) => {
@@ -38,7 +46,7 @@ export function useCreateDocument() {
       toast({ title: "Document added", description: "Your document has been saved." });
     },
     onError: (error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: parseApiError(error, "Failed to create document"), variant: "destructive" });
     },
   });
 }
@@ -50,13 +58,7 @@ export function useUpdateDocument() {
   return useMutation({
     mutationFn: async ({ id, tripId, ...updates }: { id: number; tripId: number } & Partial<InsertTravelDocument>) => {
       const url = buildUrl(api.travelDocuments.update.path, { id });
-      const res = await fetch(url, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to update document");
+      const res = await apiRequest("PUT", url, updates);
       return res.json();
     },
     onSuccess: (_, variables) => {
@@ -64,7 +66,7 @@ export function useUpdateDocument() {
       toast({ title: "Document updated" });
     },
     onError: (error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: parseApiError(error, "Failed to update document"), variant: "destructive" });
     },
   });
 }
@@ -76,18 +78,14 @@ export function useDeleteDocument() {
   return useMutation({
     mutationFn: async ({ id, tripId }: { id: number; tripId: number }) => {
       const url = buildUrl(api.travelDocuments.delete.path, { id });
-      const res = await fetch(url, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to delete document");
+      await apiRequest("DELETE", url);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [api.travelDocuments.listByTrip.path, variables.tripId] });
       toast({ title: "Document deleted", description: "The document has been removed." });
     },
     onError: (error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: parseApiError(error, "Failed to delete document"), variant: "destructive" });
     },
   });
 }

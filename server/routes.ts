@@ -54,6 +54,7 @@ const aiRouteRateLimit = createRateLimit({
   message: "Too many AI requests. Please wait a few minutes and try again.",
   keyGenerator: (req) => `ai:${req.ip}:${req.user?.id ?? "anon"}`,
 });
+const MAX_DOCUMENT_ATTACHMENT_DATA_URL_LENGTH = 4_500_000;
 
 if (!openai) {
   console.warn("OPENAI_API_KEY is not set. AI-powered endpoints are disabled.");
@@ -185,6 +186,36 @@ function handleAiError(res: Response, fallbackMessage: string, error: unknown) {
 
 function normalizeCurrencyCode(input?: string | null) {
   return (input ?? "USD").trim().toUpperCase().slice(0, 3) || "USD";
+}
+
+function validateDocumentAttachmentInput(
+  input: { attachmentName?: string | null; attachmentDataUrl?: string | null },
+  res: Response,
+): boolean {
+  const hasAttachmentName = Boolean(input.attachmentName?.trim());
+  const hasAttachmentData = Boolean(input.attachmentDataUrl?.trim());
+
+  if (hasAttachmentName !== hasAttachmentData) {
+    res.status(400).json({ message: "Attachment name and data must be provided together." });
+    return false;
+  }
+
+  if (!hasAttachmentData) {
+    return true;
+  }
+
+  const attachmentDataUrl = input.attachmentDataUrl!.trim();
+  if (!attachmentDataUrl.startsWith("data:")) {
+    res.status(400).json({ message: "Attachment must be a valid data URL." });
+    return false;
+  }
+
+  if (attachmentDataUrl.length > MAX_DOCUMENT_ATTACHMENT_DATA_URL_LENGTH) {
+    res.status(400).json({ message: "Attachment is too large. Please upload a file under 3 MB." });
+    return false;
+  }
+
+  return true;
 }
 
 function buildStaticCustomsSummary(entry: {
@@ -1338,6 +1369,7 @@ Rules:
       const trip = await getOwnedTripOr404(req, res, Number(req.params.tripId));
       if (!trip) return;
       const input = api.travelDocuments.create.input.parse(req.body);
+      if (!validateDocumentAttachmentInput(input, res)) return;
       const doc = await storage.createTravelDocument({ ...input, tripId: trip.id });
       res.status(201).json(doc);
     } catch (err) {
@@ -1355,6 +1387,7 @@ Rules:
       if (!trip) return;
 
       const input = api.travelDocuments.update.input.parse(req.body);
+      if (!validateDocumentAttachmentInput(input, res)) return;
       const doc = await storage.updateTravelDocument(Number(req.params.id), input);
       res.json(doc);
     } catch (err) {

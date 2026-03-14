@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { api, buildUrl } from "@shared/routes";
+import { apiRequest } from "@/lib/queryClient";
 import type { TravelDocument } from "@shared/schema";
 
 const DOC_TYPES = [
@@ -56,6 +57,8 @@ type BookingImportPreview = {
     currency: string;
   }>;
 };
+
+const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
 
 function getDocTypeConfig(type: string) {
   return DOC_TYPES.find((d) => d.value === type) || DOC_TYPES[DOC_TYPES.length - 1];
@@ -98,21 +101,15 @@ export default function DocumentVault() {
   const [formLabel, setFormLabel] = useState("");
   const [formReference, setFormReference] = useState("");
   const [formNotes, setFormNotes] = useState("");
+  const [formAttachmentName, setFormAttachmentName] = useState("");
+  const [formAttachmentDataUrl, setFormAttachmentDataUrl] = useState("");
   const [importText, setImportText] = useState("");
   const [importPreview, setImportPreview] = useState<BookingImportPreview | null>(null);
 
   const previewImportMutation = useMutation({
     mutationFn: async (rawText: string) => {
       const url = buildUrl(api.bookingImport.preview.path, { tripId });
-      const res = await fetch(url, {
-        method: api.bookingImport.preview.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText }),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        throw new Error((await res.json().catch(() => null))?.message ?? "Failed to preview import");
-      }
+      const res = await apiRequest(api.bookingImport.preview.method, url, { rawText });
       return (await res.json()) as BookingImportPreview;
     },
     onSuccess: (preview) => {
@@ -130,15 +127,7 @@ export default function DocumentVault() {
   const applyImportMutation = useMutation({
     mutationFn: async (preview: BookingImportPreview) => {
       const url = buildUrl(api.bookingImport.apply.path, { tripId });
-      const res = await fetch(url, {
-        method: api.bookingImport.apply.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(preview),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        throw new Error((await res.json().catch(() => null))?.message ?? "Failed to save imported items");
-      }
+      const res = await apiRequest(api.bookingImport.apply.method, url, preview);
       return res.json();
     },
     onSuccess: async () => {
@@ -179,17 +168,58 @@ export default function DocumentVault() {
         label: formLabel.trim(),
         referenceNumber: formReference.trim() || null,
         notes: formNotes.trim() || null,
+        attachmentName: formAttachmentName || null,
+        attachmentDataUrl: formAttachmentDataUrl || null,
       },
       {
         onSuccess: () => {
           setFormLabel("");
           setFormReference("");
           setFormNotes("");
+          setFormAttachmentName("");
+          setFormAttachmentDataUrl("");
           setFormDocType("flight");
           setIsFormOpen(false);
         },
       },
     );
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setFormAttachmentName("");
+      setFormAttachmentDataUrl("");
+      return;
+    }
+
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      toast({
+        title: "File too large",
+        description: "Please upload a document under 3 MB.",
+        variant: "destructive",
+      });
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error("Unable to read file"));
+        reader.readAsDataURL(file);
+      });
+
+      setFormAttachmentName(file.name);
+      setFormAttachmentDataUrl(dataUrl);
+    } catch {
+      toast({
+        title: "Attachment failed",
+        description: "Could not read the selected file.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDelete = (id: number) => {
@@ -409,6 +439,36 @@ export default function DocumentVault() {
                 </div>
               </div>
 
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-muted-foreground mb-1.5">
+                  Attach Document (PDF/Image)
+                </label>
+                <Input
+                  type="file"
+                  accept=".pdf,image/*,.txt,.doc,.docx"
+                  onChange={handleFileChange}
+                  className="rounded-xl"
+                  data-testid="input-doc-attachment"
+                />
+                {formAttachmentName && (
+                  <div className="mt-2 flex items-center gap-3 text-sm text-muted-foreground">
+                    <span>{formAttachmentName}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto px-2 py-1"
+                      onClick={() => {
+                        setFormAttachmentName("");
+                        setFormAttachmentDataUrl("");
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               <Button type="submit" disabled={createMutation.isPending || !formLabel.trim()} className="rounded-xl" data-testid="button-submit-document">
                 <Plus className="h-4 w-4 mr-2" />
                 {createMutation.isPending ? "Saving..." : t("docs.save")}
@@ -462,6 +522,18 @@ export default function DocumentVault() {
                                 <p className="text-sm text-muted-foreground mt-2 leading-relaxed" data-testid={`text-doc-notes-${doc.id}`}>
                                   {doc.notes}
                                 </p>
+                              )}
+
+                              {doc.attachmentDataUrl && (
+                                <a
+                                  href={doc.attachmentDataUrl}
+                                  download={doc.attachmentName || `${doc.label}.pdf`}
+                                  className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-primary underline underline-offset-4"
+                                  data-testid={`link-doc-attachment-${doc.id}`}
+                                >
+                                  <FileText className="h-4 w-4" />
+                                  {doc.attachmentName || "Open attachment"}
+                                </a>
                               )}
                             </div>
 
