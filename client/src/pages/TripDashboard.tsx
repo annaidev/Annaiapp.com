@@ -21,8 +21,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { api, buildUrl } from "@shared/routes";
+import type { ItineraryItem } from "@shared/schema";
 import { getDestinationFallbackArt, getDestinationImageUrl } from "@/lib/destination-art";
 import { useI18n } from "@/lib/i18n";
+import { apiRequest } from "@/lib/queryClient";
 
 type TripPlanResult = {
   destination: string;
@@ -65,6 +67,21 @@ type CustomsEntryResult = {
     deadline: string | null;
     summary: string;
   }>;
+};
+
+type AssistantSuggestion = {
+  title: string;
+  summary: string;
+  category: "activity" | "meal" | "transport" | "sightseeing";
+  googleSearchUrl?: string | null;
+  googleMapsUrl?: string | null;
+};
+
+type AssistantMessage = {
+  role: "user" | "assistant";
+  content: string;
+  suggestions?: AssistantSuggestion[];
+  createdItineraryItem?: Pick<ItineraryItem, "id" | "title" | "dayNumber" | "timeSlot"> | null;
 };
 
 const EXTERNAL_LINKS = [
@@ -272,8 +289,10 @@ export default function TripDashboard() {
   const tripPlanMutation = useTripPlan();
   const assistantMutation = useTravelAssistant();
   const [assistantQuestion, setAssistantQuestion] = useState("");
-  const [assistantMessages, setAssistantMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
+  const [activeAssistantSuggestions, setActiveAssistantSuggestions] = useState<AssistantSuggestion[]>([]);
   const aiContentRef = useRef<HTMLDivElement | null>(null);
+  const assistantThreadRef = useRef<HTMLDivElement | null>(null);
   const [tripPlanSettings, setTripPlanSettings] = useState<{
     days: number;
     planDepth: "quick" | "detailed";
@@ -305,6 +324,23 @@ export default function TripDashboard() {
 
     return () => window.clearTimeout(timer);
   }, [activeAiTool, activeTab]);
+
+  useEffect(() => {
+    if (activeAiTool !== "assistant") {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const thread = assistantThreadRef.current;
+      if (!thread) return;
+      thread.scrollTo({
+        top: thread.scrollHeight,
+        behavior: "smooth",
+      });
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [activeAiTool, assistantMessages.length, assistantMutation.isPending]);
 
   const { data: packingItems, isLoading: packingLoading } = useQuery({
     queryKey: [api.packingLists.listByTrip.path, tripId],
@@ -348,6 +384,13 @@ export default function TripDashboard() {
   });
   const seedItineraryMutation = useMutation({
     mutationFn: async (plan: TripPlanResult) => {
+      const destinationForLinks = trip?.destination ?? plan.destination;
+      const buildGoogleMapsSearchUrl = (query: string) =>
+        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+
+      const buildItineraryLink = (details: string) =>
+        buildGoogleMapsSearchUrl(`${details} ${destinationForLinks}`);
+
       const buildEntries = () =>
         plan.itinerary.flatMap((day) => {
           const entries: Array<{
@@ -356,6 +399,7 @@ export default function TripDashboard() {
             title: string;
             description: string;
             category: string;
+            googlePlaceUrl: string;
             sourceFingerprint: string | null;
           }> = [
             {
@@ -364,6 +408,7 @@ export default function TripDashboard() {
               title: `Morning - ${day.theme}`,
               description: day.morning,
               category: "sightseeing",
+              googlePlaceUrl: buildItineraryLink(day.morning),
               sourceFingerprint: plan._seedFingerprint,
             },
             {
@@ -372,6 +417,7 @@ export default function TripDashboard() {
               title: `Afternoon - ${day.theme}`,
               description: day.afternoon,
               category: "activity",
+              googlePlaceUrl: buildItineraryLink(day.afternoon),
               sourceFingerprint: plan._seedFingerprint,
             },
             {
@@ -380,6 +426,7 @@ export default function TripDashboard() {
               title: `Evening - ${day.theme}`,
               description: day.evening,
               category: "activity",
+              googlePlaceUrl: buildItineraryLink(day.evening),
               sourceFingerprint: plan._seedFingerprint,
             },
           ];
@@ -391,6 +438,7 @@ export default function TripDashboard() {
               title: `Food Note - ${day.theme}`,
               description: day.foodNote,
               category: "meal",
+              googlePlaceUrl: buildItineraryLink(day.foodNote),
               sourceFingerprint: plan._seedFingerprint,
             });
           }
@@ -402,15 +450,7 @@ export default function TripDashboard() {
       await Promise.all(
         entries.map(async (entry) => {
           const url = buildUrl(api.itineraryItems.create.path, { tripId });
-          const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(entry),
-            credentials: "include",
-          });
-          if (!res.ok) {
-            throw new Error("Failed to seed itinerary");
-          }
+          await apiRequest(api.itineraryItems.create.method, url, entry);
         }),
       );
     },
@@ -523,19 +563,51 @@ export default function TripDashboard() {
   const handleAskAssistant = () => {
     const question = assistantQuestion.trim();
     if (!question) return;
-    setActiveAiTool("assistant");
     if (!entitlements?.enabledFeatures.includes("ai_itinerary")) {
       setLocation("/pricing");
       return;
     }
 
-    setAssistantMessages((current) => [...current, { role: "user", content: question }]);
+    const nextConversation = [...assistantMessages, { role: "user" as const, content: question }];
+    setAssistantMessages(nextConversation);
     setAssistantQuestion("");
     assistantMutation.mutate(
-      { tripId, question },
       {
-        onSuccess: (data) => {
-          setAssistantMessages((current) => [...current, { role: "assistant", content: data.answer }]);
+        tripId,
+        question,
+        messages: nextConversation
+          .slice(-12)
+          .map((message) => ({ role: message.role, content: message.content })),
+        activeSuggestions: activeAssistantSuggestions,
+      },
+      {
+        onSuccess: async (data) => {
+          if (data.createdItineraryItem) {
+            await queryClient.invalidateQueries({ queryKey: [api.itineraryItems.listByTrip.path, tripId] });
+            toast({
+              title: "Added to itinerary",
+              description: `${data.createdItineraryItem.title} was added to your itinerary.`,
+            });
+          }
+          setActiveAssistantSuggestions((current) =>
+            data.suggestions.length > 0 ? data.suggestions : current,
+          );
+          setAssistantMessages((current) => [
+            ...current,
+            {
+              role: "assistant",
+              content: data.answer,
+              suggestions: data.suggestions,
+              createdItineraryItem: data.createdItineraryItem
+                ? {
+                    id: data.createdItineraryItem.id,
+                    title: data.createdItineraryItem.title,
+                    dayNumber: data.createdItineraryItem.dayNumber,
+                    timeSlot: data.createdItineraryItem.timeSlot,
+                  }
+                : null,
+            },
+          ]);
         },
       },
     );
@@ -828,53 +900,88 @@ export default function TripDashboard() {
                     <p className="text-sm text-muted-foreground/70 mt-2 max-w-md">{t("trip.selectToolBody")}</p>
                   </div>
                 ) : activeAiTool === "assistant" ? (
-                  <div className="bg-card rounded-3xl p-8 border border-border/50 shadow-xl min-h-[300px] space-y-6">
-                    <div>
+                  <div className="bg-card rounded-3xl p-5 md:p-6 border border-border/50 shadow-xl min-h-[420px] h-[72vh] max-h-[860px] flex flex-col">
+                    <div className="mb-4">
                       <h2 className="text-2xl font-bold flex items-center gap-2">
                         {aiIconMap.assistant}
                         {aiTitleMap.assistant}
                       </h2>
                       <p className="mt-2 text-sm text-muted-foreground">{t("trip.assistantBody")}</p>
                     </div>
-                    <Textarea
-                      value={assistantQuestion}
-                      onChange={(event) => setAssistantQuestion(event.target.value)}
-                      className="min-h-[120px] rounded-2xl"
-                      placeholder={t("trip.assistantPlaceholder")}
-                      data-testid="textarea-travel-assistant"
-                    />
-                    <Button
-                      onClick={handleAskAssistant}
-                      disabled={assistantMutation.isPending || !assistantQuestion.trim()}
-                      className="rounded-2xl"
-                      data-testid="button-travel-assistant"
-                    >
-                      {assistantMutation.isPending ? "Loading..." : t("trip.assistantSend")}
-                    </Button>
-                    <div className="space-y-3 rounded-2xl bg-muted/40 p-4">
-                      {!(assistantMessages.length === 0 && !assistantMutation.isPending) && (
-                        assistantMessages.map((message, index) => (
+
+                    <div ref={assistantThreadRef} className="flex-1 overflow-y-auto rounded-2xl bg-muted/40 p-4">
+                      <div className="space-y-3">
+                        {assistantMessages.map((message, index) => (
                           <div
                             key={`${message.role}-${index}`}
                             className={`rounded-2xl px-4 py-3 text-sm ${
                               message.role === "user"
-                                ? "ml-auto max-w-[85%] bg-primary text-primary-foreground"
+                                ? "ml-auto max-w-[90%] bg-primary text-primary-foreground"
                                 : "max-w-[95%] border border-border/60 bg-background text-muted-foreground shadow-sm"
                             }`}
                           >
                             {message.role === "assistant" ? (
-                              <AiMarkdownCards
-                                content={message.content}
-                                autoLinkPlaces
-                                destinationContext={trip.destination}
-                              />
+                              <div className="space-y-4">
+                                <AiMarkdownCards
+                                  content={message.content}
+                                  autoLinkPlaces
+                                  destinationContext={trip.destination}
+                                />
+                                {message.createdItineraryItem && (
+                                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-700">
+                                    Added to itinerary: Day {message.createdItineraryItem.dayNumber}
+                                    {message.createdItineraryItem.timeSlot ? ` at ${message.createdItineraryItem.timeSlot}` : ""}
+                                  </div>
+                                )}
+                              </div>
                             ) : (
                               message.content
                             )}
                           </div>
-                        ))
-                      )}
+                        ))}
+                        {assistantMutation.isPending && (
+                          <div className="max-w-[95%] rounded-2xl border border-border/60 bg-background px-4 py-3 text-sm text-muted-foreground shadow-sm">
+                            Thinking...
+                          </div>
+                        )}
+                      </div>
                     </div>
+
+                    <form
+                      className="mt-4 space-y-3 rounded-2xl border border-border/60 bg-background p-3"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        if (!assistantMutation.isPending && assistantQuestion.trim()) {
+                          handleAskAssistant();
+                        }
+                      }}
+                    >
+                      <Textarea
+                        value={assistantQuestion}
+                        onChange={(event) => setAssistantQuestion(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            if (!assistantMutation.isPending && assistantQuestion.trim()) {
+                              handleAskAssistant();
+                            }
+                          }
+                        }}
+                        className="min-h-[88px] rounded-xl bg-white border-input"
+                        placeholder={t("trip.assistantPlaceholder")}
+                        data-testid="textarea-travel-assistant"
+                      />
+                      <div className="flex justify-end">
+                        <Button
+                          type="submit"
+                          disabled={assistantMutation.isPending || !assistantQuestion.trim()}
+                          className="rounded-2xl"
+                          data-testid="button-travel-assistant"
+                        >
+                          {assistantMutation.isPending ? "Loading..." : t("trip.assistantSend")}
+                        </Button>
+                      </div>
+                    </form>
                   </div>
                 ) : activeAiTool === "trip-plan" ? (
                   <div className="space-y-6">

@@ -171,6 +171,10 @@ async function verifyJwsWithAppleKeys(token: string): Promise<JsonRecord> {
   return parsed.payload;
 }
 
+export async function verifyAppleSignedTransactionInfo(signedTransactionInfo: string): Promise<JsonRecord> {
+  return verifyJwsWithAppleKeys(signedTransactionInfo);
+}
+
 export async function verifyAppleNotificationPayload(signedPayload: string): Promise<{
   notification: JsonRecord;
   transaction: JsonRecord | null;

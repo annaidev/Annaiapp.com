@@ -349,7 +349,7 @@ export default function AuthPage() {
                   </div>
                   <Button
                     type="submit"
-                    disabled={forgotLoading || !newPassword || newPassword.length < 6}
+                    disabled={forgotLoading || !newPassword || newPassword.length < 10}
                     className="w-full h-12 rounded-xl text-base font-semibold"
                     data-testid="button-reset-password"
                   >
@@ -403,6 +403,22 @@ export default function AuthPage() {
                 Back to sign in
               </button>
             )}
+          </div>
+
+          <div className="mt-6 border-t border-border/60 pt-4 text-center text-xs text-muted-foreground">
+            By using Annai, you agree to the{" "}
+            <a href="/terms-of-service/index.html" className="font-medium text-primary underline underline-offset-4">
+              Terms of Service
+            </a>{" "}
+            and{" "}
+            <a href="/privacy-policy/index.html" className="font-medium text-primary underline underline-offset-4">
+              Privacy Policy
+            </a>
+            . Need help? Visit{" "}
+            <a href="/support/index.html" className="font-medium text-primary underline underline-offset-4">
+              Support
+            </a>
+            .
           </div>
         </Card>
       </div>

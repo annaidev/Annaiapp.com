@@ -1,48 +1,15 @@
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { useToast } from "@/hooks/use-toast";
-
-async function parseJsonResponse<T>(res: Response, fallbackMessage: string): Promise<T> {
-  const contentType = res.headers.get("content-type") ?? "";
-  const rawText = await res.text();
-
-  if (!res.ok) {
-    if (contentType.includes("application/json")) {
-      let parsed: { message?: string } | null = null;
-      try {
-        parsed = JSON.parse(rawText) as { message?: string };
-      } catch {
-        parsed = null;
-      }
-      throw new Error(parsed?.message || fallbackMessage);
-    }
-
-    throw new Error(fallbackMessage);
-  }
-
-  if (!contentType.includes("application/json")) {
-    throw new Error("The server returned an unexpected response. Refresh and try again.");
-  }
-
-  try {
-    return JSON.parse(rawText) as T;
-  } catch {
-    throw new Error("The server returned invalid data. Refresh and try again.");
-  }
-}
+import { apiRequest } from "@/lib/queryClient";
 
 export function useGeneratePackingList() {
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async ({ destination, days }: { destination: string; days?: number }) => {
-      const res = await fetch(api.ai.generatePackingList.path, {
-        method: api.ai.generatePackingList.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, days }),
-        credentials: "include",
-      });
-      const parsed = await parseJsonResponse<unknown>(res, "Failed to generate packing list");
+      const res = await apiRequest(api.ai.generatePackingList.method, api.ai.generatePackingList.path, { destination, days });
+      const parsed = await res.json();
       return api.ai.generatePackingList.responses[200].parse(parsed);
     },
     onError: (error) => {
@@ -66,13 +33,8 @@ export function useTripPlan() {
       planDepth?: "quick" | "detailed";
       travelStyle?: "balanced" | "food" | "culture" | "family" | "relaxed";
     }) => {
-      const res = await fetch(api.ai.tripPlan.path, {
-        method: api.ai.tripPlan.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, days, planDepth, travelStyle }),
-        credentials: "include",
-      });
-      const responseBody = await parseJsonResponse<unknown>(res, "Failed to generate trip plan");
+      const res = await apiRequest(api.ai.tripPlan.method, api.ai.tripPlan.path, { destination, days, planDepth, travelStyle });
+      const responseBody = await res.json();
       const parsed = api.ai.tripPlan.responses[200].parse(responseBody);
       const cacheHeader = res.headers.get("X-Annai-Cache");
       const cacheKey = res.headers.get("X-Annai-Cache-Key");
@@ -93,13 +55,8 @@ export function useCulturalTips() {
 
   return useMutation({
     mutationFn: async (destination: string) => {
-      const res = await fetch(api.ai.culturalTips.path, {
-        method: api.ai.culturalTips.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination }),
-        credentials: "include",
-      });
-      const parsed = await parseJsonResponse<unknown>(res, "Failed to generate cultural tips");
+      const res = await apiRequest(api.ai.culturalTips.method, api.ai.culturalTips.path, { destination });
+      const parsed = await res.json();
       return api.ai.culturalTips.responses[200].parse(parsed);
     },
     onError: (error) => {
@@ -113,13 +70,8 @@ export function useSafetyMap() {
 
   return useMutation({
     mutationFn: async (destination: string) => {
-      const res = await fetch(api.ai.safetyMap.path, {
-        method: api.ai.safetyMap.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination }),
-        credentials: "include",
-      });
-      const parsed = await parseJsonResponse<unknown>(res, "Failed to generate safety map");
+      const res = await apiRequest(api.ai.safetyMap.method, api.ai.safetyMap.path, { destination });
+      const parsed = await res.json();
       return api.ai.safetyMap.responses[200].parse(parsed);
     },
     onError: (error) => {
@@ -133,13 +85,8 @@ export function useSafetyAdvice() {
 
   return useMutation({
     mutationFn: async ({ destination, citizenship }: { destination: string, citizenship?: string }) => {
-      const res = await fetch(api.ai.safetyAdvice.path, {
-        method: api.ai.safetyAdvice.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, citizenship }),
-        credentials: "include",
-      });
-      const parsed = await parseJsonResponse<unknown>(res, "Failed to generate safety advice");
+      const res = await apiRequest(api.ai.safetyAdvice.method, api.ai.safetyAdvice.path, { destination, citizenship });
+      const parsed = await res.json();
       return api.ai.safetyAdvice.responses[200].parse(parsed);
     },
     onError: (error) => {
@@ -153,13 +100,8 @@ export function usePhrases() {
 
   return useMutation({
     mutationFn: async (destination: string) => {
-      const res = await fetch(api.ai.phrases.path, {
-        method: api.ai.phrases.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination }),
-        credentials: "include",
-      });
-      const parsed = await parseJsonResponse<unknown>(res, "Failed to generate phrases");
+      const res = await apiRequest(api.ai.phrases.method, api.ai.phrases.path, { destination });
+      const parsed = await res.json();
       return api.ai.phrases.responses[200].parse(parsed);
     },
     onError: (error) => {
@@ -173,13 +115,8 @@ export function useWeather() {
 
   return useMutation({
     mutationFn: async ({ destination, startDate, endDate }: { destination: string, startDate?: string, endDate?: string }) => {
-      const res = await fetch(api.ai.weather.path, {
-        method: api.ai.weather.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, startDate, endDate }),
-        credentials: "include",
-      });
-      const parsed = await parseJsonResponse<unknown>(res, "Failed to generate weather forecast");
+      const res = await apiRequest(api.ai.weather.method, api.ai.weather.path, { destination, startDate, endDate });
+      const parsed = await res.json();
       return api.ai.weather.responses[200].parse(parsed);
     },
     onError: (error) => {
@@ -193,13 +130,8 @@ export function useCustomsEntry() {
 
   return useMutation({
     mutationFn: async (tripId: number) => {
-      const res = await fetch(api.ai.customsEntry.path, {
-        method: api.ai.customsEntry.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tripId }),
-        credentials: "include",
-      });
-      const parsed = await parseJsonResponse<unknown>(res, "Failed to get customs and entry guidance");
+      const res = await apiRequest(api.ai.customsEntry.method, api.ai.customsEntry.path, { tripId });
+      const parsed = await res.json();
       return api.ai.customsEntry.responses[200].parse(parsed);
     },
     onError: (error) => {
@@ -212,14 +144,30 @@ export function useTravelAssistant() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ tripId, question }: { tripId: number; question: string }) => {
-      const res = await fetch(api.ai.assistant.path, {
-        method: api.ai.assistant.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tripId, question }),
-        credentials: "include",
+    mutationFn: async ({
+      tripId,
+      question,
+      messages,
+      activeSuggestions,
+    }: {
+      tripId: number;
+      question: string;
+      messages?: Array<{ role: "user" | "assistant"; content: string }>;
+      activeSuggestions?: Array<{
+        title: string;
+        summary: string;
+        category: "activity" | "meal" | "transport" | "sightseeing";
+        googleSearchUrl?: string | null;
+        googleMapsUrl?: string | null;
+      }>;
+    }) => {
+      const res = await apiRequest(api.ai.assistant.method, api.ai.assistant.path, {
+        tripId,
+        question,
+        messages,
+        activeSuggestions,
       });
-      const parsed = await parseJsonResponse<unknown>(res, "Failed to get assistant response");
+      const parsed = await res.json();
       return api.ai.assistant.responses[200].parse(parsed);
     },
     onError: (error) => {

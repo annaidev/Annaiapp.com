@@ -8,9 +8,12 @@ import { promisify } from "util";
 import { storage } from "./storage";
 import type { User as AppUser } from "@shared/schema";
 import connectPg from "connect-pg-simple";
+import { createRateLimit } from "./rateLimit";
 
 const scryptAsync = promisify(scrypt);
 const ECOSYSTEM_SSO_TOKEN_TTL_SECONDS = 60;
+const SESSION_COOKIE_NAME = "connect.sid";
+const isProduction = process.env.NODE_ENV === "production";
 
 async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
@@ -23,6 +26,104 @@ async function comparePasswords(supplied: string, stored: string): Promise<boole
   const hashedBuf = Buffer.from(hashed, "hex");
   const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
   return timingSafeEqual(hashedBuf, suppliedBuf);
+}
+
+function getSessionSecret(): string {
+  const configuredSecret = process.env.SESSION_SECRET?.trim();
+  if (configuredSecret) return configuredSecret;
+  if (isProduction) {
+    throw new Error("SESSION_SECRET must be set in production.");
+  }
+  return "annai-dev-session-secret";
+}
+
+function normalizeSecurityAnswer(answer: string): string {
+  return answer.trim().toLowerCase();
+}
+
+async function hashSecurityAnswer(answer: string): Promise<string> {
+  return hashPassword(`security-answer:${normalizeSecurityAnswer(answer)}`);
+}
+
+async function compareSecurityAnswer(supplied: string, stored: string): Promise<boolean> {
+  const normalizedSupplied = normalizeSecurityAnswer(supplied);
+
+  if (stored.includes(".")) {
+    return comparePasswords(`security-answer:${normalizedSupplied}`, stored);
+  }
+
+  const normalizedStored = normalizeSecurityAnswer(stored);
+  const suppliedBuffer = Buffer.from(normalizedSupplied, "utf8");
+  const storedBuffer = Buffer.from(normalizedStored, "utf8");
+
+  if (suppliedBuffer.length !== storedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(suppliedBuffer, storedBuffer);
+}
+
+function getRateLimitKey(req: Request): string {
+  const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
+  return `${req.path}:${req.ip}:${username}`;
+}
+
+const loginRateLimit = createRateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  message: "Too many login attempts. Please wait a few minutes and try again.",
+  keyGenerator: getRateLimitKey,
+});
+
+const registerRateLimit = createRateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 8,
+  message: "Too many registration attempts. Please try again later.",
+  keyGenerator: getRateLimitKey,
+});
+
+const passwordQuestionRateLimit = createRateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: "Too many password reset attempts. Please try again later.",
+  keyGenerator: getRateLimitKey,
+});
+
+const passwordResetRateLimit = createRateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: "Too many password reset attempts. Please try again later.",
+  keyGenerator: getRateLimitKey,
+});
+
+const annaiExchangeRateLimit = createRateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  message: "Too many Annai handoff attempts. Please try again later.",
+});
+
+function finalizeAuthenticatedSession(
+  req: Request,
+  res: Response,
+  user: AppUser,
+  successStatus = 200,
+  errorMessage = "Login failed",
+) {
+  req.session.regenerate((regenerateErr) => {
+    if (regenerateErr) {
+      return res.status(500).json({ message: errorMessage });
+    }
+
+    req.session.csrfToken = randomBytes(24).toString("base64url");
+
+    req.login(user, (loginErr) => {
+      if (loginErr) {
+        return res.status(500).json({ message: errorMessage });
+      }
+
+      return res.status(successStatus).json({ id: user.id, username: user.username });
+    });
+  });
 }
 
 type AnnaiSsoPayload = {
@@ -90,9 +191,16 @@ declare global {
   }
 }
 
+declare module "express-session" {
+  interface SessionData {
+    csrfToken?: string;
+  }
+}
+
 export function setupAuth(app: Express) {
   const MemoryStore = createMemoryStore(session);
   const PgStore = connectPg(session);
+  const sessionSecret = getSessionSecret();
   const sessionStore =
     process.env.DATABASE_URL
       ? new PgStore({
@@ -105,19 +213,26 @@ export function setupAuth(app: Express) {
   app.use(
     session({
       store: sessionStore,
-      secret: process.env.SESSION_SECRET || "annai-fallback-secret",
+      secret: sessionSecret,
       resave: false,
       saveUninitialized: false,
+      proxy: isProduction,
       cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         httpOnly: true,
-        secure: false,
+        secure: isProduction,
         sameSite: "lax",
       },
     })
   );
 
   app.use(passport.initialize());
+  app.use((req, _res, next) => {
+    if (!req.session.csrfToken) {
+      req.session.csrfToken = randomBytes(24).toString("base64url");
+    }
+    next();
+  });
   app.use((req, res, next) => {
     passport.session()(req, res, (err: unknown) => {
       if (!err) {
@@ -127,7 +242,7 @@ export function setupAuth(app: Express) {
       if (err instanceof Error && err.message === "Failed to deserialize user out of session") {
         req.logout(() => {
           req.session?.destroy(() => {
-            res.clearCookie("connect.sid");
+            res.clearCookie(SESSION_COOKIE_NAME);
             next();
           });
         });
@@ -168,7 +283,43 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/register", async (req: Request, res: Response) => {
+  app.get("/api/csrf-token", (req: Request, res: Response) => {
+    res.json({ csrfToken: req.session.csrfToken });
+  });
+
+  app.use((req, res, next) => {
+    const method = req.method.toUpperCase();
+    const requiresCsrf = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+    if (!requiresCsrf || !req.path.startsWith("/api/")) {
+      return next();
+    }
+
+    if (
+      req.path === "/api/subscription/webhooks/apple" ||
+      req.path === "/api/subscription/webhooks/google"
+    ) {
+      return next();
+    }
+
+    const providedToken = req.header("x-csrf-token");
+    const expectedToken = req.session.csrfToken;
+    if (!providedToken || !expectedToken) {
+      return res.status(403).json({ message: "CSRF token required" });
+    }
+
+    const providedBuffer = Buffer.from(providedToken, "utf8");
+    const expectedBuffer = Buffer.from(expectedToken, "utf8");
+    if (
+      providedBuffer.length !== expectedBuffer.length ||
+      !timingSafeEqual(providedBuffer, expectedBuffer)
+    ) {
+      return res.status(403).json({ message: "Invalid CSRF token" });
+    }
+
+    return next();
+  });
+
+  app.post("/api/register", registerRateLimit, async (req: Request, res: Response) => {
     try {
       const { username, password, securityQuestion, securityAnswer } = req.body;
       if (!username || !password) {
@@ -177,8 +328,8 @@ export function setupAuth(app: Express) {
       if (username.length < 3) {
         return res.status(400).json({ message: "Username must be at least 3 characters" });
       }
-      if (password.length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      if (password.length < 10) {
+        return res.status(400).json({ message: "Password must be at least 10 characters" });
       }
       if (!securityQuestion || !securityAnswer) {
         return res.status(400).json({ message: "Security question and answer are required" });
@@ -190,7 +341,7 @@ export function setupAuth(app: Express) {
       }
 
       const hashedPassword = await hashPassword(password);
-      const hashedAnswer = (securityAnswer as string).trim().toLowerCase();
+      const hashedAnswer = await hashSecurityAnswer(securityAnswer as string);
       const user = await storage.createUser({
         username,
         password: hashedPassword,
@@ -198,67 +349,67 @@ export function setupAuth(app: Express) {
         securityAnswer: hashedAnswer,
       });
 
-      req.login(user, (err) => {
-        if (err) return res.status(500).json({ message: "Login failed after registration" });
-        return res.status(201).json({ id: user.id, username: user.username });
-      });
+      return finalizeAuthenticatedSession(req, res, user, 201, "Login failed after registration");
     } catch (err) {
       console.error("Registration error:", err);
       return res.status(500).json({ message: "Registration failed" });
     }
   });
 
-  app.post("/api/forgot-password/question", async (req: Request, res: Response) => {
+  app.post("/api/forgot-password/question", passwordQuestionRateLimit, async (req: Request, res: Response) => {
     try {
       const { username } = req.body;
       if (!username) return res.status(400).json({ message: "Username is required" });
       const user = await storage.getUserByUsername(username);
+      const genericPrompt = "Enter the security answer you set when creating your account.";
       if (!user || !user.securityQuestion) {
-        return res.status(404).json({ message: "Account not found or no security question set" });
+        return res.status(200).json({ securityQuestion: genericPrompt });
       }
-      return res.json({ securityQuestion: user.securityQuestion });
+      return res.status(200).json({ securityQuestion: genericPrompt });
     } catch (err) {
       return res.status(500).json({ message: "Something went wrong" });
     }
   });
 
-  app.post("/api/forgot-password/reset", async (req: Request, res: Response) => {
+  app.post("/api/forgot-password/reset", passwordResetRateLimit, async (req: Request, res: Response) => {
     try {
       const { username, securityAnswer, newPassword } = req.body;
       if (!username || !securityAnswer || !newPassword) {
         return res.status(400).json({ message: "All fields are required" });
       }
-      if ((newPassword as string).length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      if ((newPassword as string).length < 10) {
+        return res.status(400).json({ message: "Password must be at least 10 characters" });
       }
       const user = await storage.getUserByUsername(username);
       if (!user || !user.securityAnswer) {
-        return res.status(404).json({ message: "Account not found" });
+        return res.status(401).json({ message: "Unable to verify reset details" });
       }
-      const normalizedAnswer = (securityAnswer as string).trim().toLowerCase();
-      if (normalizedAnswer !== user.securityAnswer) {
-        return res.status(401).json({ message: "Incorrect security answer" });
+      const isValidAnswer = await compareSecurityAnswer(securityAnswer as string, user.securityAnswer);
+      if (!isValidAnswer) {
+        return res.status(401).json({ message: "Unable to verify reset details" });
       }
       const hashedPassword = await hashPassword(newPassword);
       await storage.updateUserPassword(user.id, hashedPassword);
+      if (!user.securityAnswer.includes(".")) {
+        await storage.updateUser(user.id, {
+          securityAnswer: await hashSecurityAnswer(securityAnswer as string),
+        });
+      }
       return res.json({ message: "Password reset successfully" });
     } catch (err) {
       return res.status(500).json({ message: "Something went wrong" });
     }
   });
 
-  app.post("/api/login", (req: Request, res: Response, next: NextFunction) => {
+  app.post("/api/login", loginRateLimit, (req: Request, res: Response, next: NextFunction) => {
     passport.authenticate("local", (err: any, user: AppUser | false, info: any) => {
       if (err) return next(err);
       if (!user) return res.status(401).json({ message: info?.message || "Login failed" });
-      req.login(user, (err) => {
-        if (err) return next(err);
-        return res.json({ id: user.id, username: user.username });
-      });
+      return finalizeAuthenticatedSession(req, res, user, 200, "Login failed");
     })(req, res, next);
   });
 
-  app.post("/api/auth/annai/exchange", async (req: Request, res: Response) => {
+  app.post("/api/auth/annai/exchange", annaiExchangeRateLimit, async (req: Request, res: Response) => {
     const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
     if (!token) {
       return res.status(400).json({ message: "Annai handoff token is required" });
@@ -291,16 +442,44 @@ export function setupAuth(app: Express) {
       }
     }
 
-    req.login(user, (err) => {
-      if (err) return res.status(500).json({ message: "Travel login failed after Annai exchange" });
-      return res.json({ id: user.id, username: user.username });
-    });
+    return finalizeAuthenticatedSession(req, res, user, 200, "Travel login failed after Annai exchange");
   });
 
   app.post("/api/logout", (req: Request, res: Response) => {
     req.logout((err) => {
       if (err) return res.status(500).json({ message: "Logout failed" });
-      res.json({ message: "Logged out" });
+      req.session?.destroy((sessionErr) => {
+        if (sessionErr) {
+          return res.status(500).json({ message: "Logout failed" });
+        }
+        res.clearCookie(SESSION_COOKIE_NAME);
+        return res.json({ message: "Logged out" });
+      });
+    });
+  });
+
+  app.delete("/api/account", requireAuth, (req: Request, res: Response) => {
+    const userId = req.user!.id;
+
+    req.logout((logoutErr) => {
+      if (logoutErr) {
+        return res.status(500).json({ message: "Account deletion failed during logout" });
+      }
+
+      req.session?.destroy(async (sessionErr) => {
+        if (sessionErr) {
+          return res.status(500).json({ message: "Account deletion failed while clearing the session" });
+        }
+
+        try {
+          await storage.deleteUser(userId);
+          res.clearCookie(SESSION_COOKIE_NAME);
+          return res.status(204).send();
+        } catch (error) {
+          console.error("Account deletion error:", error);
+          return res.status(500).json({ message: "Account deletion failed" });
+        }
+      });
     });
   });
 

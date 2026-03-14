@@ -37,6 +37,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
     CREATE TABLE IF NOT EXISTS annai_travel_users (
       id SERIAL PRIMARY KEY,
       annai_user_id TEXT UNIQUE,
+      apple_app_account_token TEXT UNIQUE,
       username TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
       security_question TEXT,
@@ -55,6 +56,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
   await pool.query(`
     ALTER TABLE annai_travel_users
     ADD COLUMN IF NOT EXISTS annai_user_id TEXT UNIQUE,
+    ADD COLUMN IF NOT EXISTS apple_app_account_token TEXT UNIQUE,
     ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'free',
     ADD COLUMN IF NOT EXISTS pro_access BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS pro_access_reason TEXT,
@@ -130,6 +132,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
       origin TEXT,
       destination TEXT NOT NULL,
       trip_type TEXT NOT NULL DEFAULT 'one_way',
+      budget_target_cents INTEGER,
       start_date TIMESTAMP,
       end_date TIMESTAMP,
       notes TEXT,
@@ -141,7 +144,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
   await pool.query(`
     ALTER TABLE annai_travel_trips
     ADD COLUMN IF NOT EXISTS origin TEXT,
-    ADD COLUMN IF NOT EXISTS trip_type TEXT NOT NULL DEFAULT 'one_way';
+    ADD COLUMN IF NOT EXISTS trip_type TEXT NOT NULL DEFAULT 'one_way',
+    ADD COLUMN IF NOT EXISTS budget_target_cents INTEGER;
   `);
 
   await pool.query(`
@@ -187,6 +191,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
       title TEXT NOT NULL,
       description TEXT,
       category TEXT NOT NULL,
+      google_place_url TEXT,
       source_fingerprint TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -194,6 +199,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
 
   await pool.query(`
     ALTER TABLE annai_travel_itinerary_items
+    ADD COLUMN IF NOT EXISTS google_place_url TEXT,
     ADD COLUMN IF NOT EXISTS source_fingerprint TEXT;
   `);
 

@@ -1,6 +1,11 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest, getQueryFn } from "@/lib/queryClient";
+import { queryClient, apiRequest, getQueryFn, invalidateCsrfToken } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
+
+function resetUserScopedClientState(user: Pick<User, "id" | "username">) {
+  queryClient.clear();
+  queryClient.setQueryData(["/api/user"], user);
+}
 
 export function useUser() {
   return useQuery<Pick<User, "id" | "username"> | null>({
@@ -18,8 +23,8 @@ export function useLogin() {
       return res.json();
     },
     onSuccess: (user: Pick<User, "id" | "username">) => {
-      queryClient.setQueryData(["/api/user"], user);
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      invalidateCsrfToken();
+      resetUserScopedClientState(user);
     },
   });
 }
@@ -31,8 +36,8 @@ export function useRegister() {
       return res.json();
     },
     onSuccess: (user: Pick<User, "id" | "username">) => {
-      queryClient.setQueryData(["/api/user"], user);
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      invalidateCsrfToken();
+      resetUserScopedClientState(user);
     },
   });
 }
@@ -43,6 +48,20 @@ export function useLogout() {
       await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
+      invalidateCsrfToken();
+      queryClient.clear();
+      window.location.href = "/";
+    },
+  });
+}
+
+export function useDeleteAccount() {
+  return useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/account");
+    },
+    onSuccess: () => {
+      invalidateCsrfToken();
       queryClient.clear();
       window.location.href = "/";
     },

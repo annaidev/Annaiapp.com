@@ -12,6 +12,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "drizzle-kit push",
+    "release:check": "tsx script/release-readiness.ts",
     "mobile:doctor": "tsx script/mobile-doctor.ts",
     "mobile:android:configure": "tsx script/mobile-android-configure.ts",
     "mobile:sync": "npm run build && npx cap sync",

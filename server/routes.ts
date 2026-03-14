@@ -1,8 +1,9 @@
 import type { Express, Request, Response } from "express";
 import type { Server } from "http";
-import { createHash, randomBytes, createHmac } from "crypto";
+import { createHash, randomBytes, createHmac, randomUUID } from "crypto";
 import { storage } from "./storage";
 import { requireAuth } from "./auth";
+import { createRateLimit } from "./rateLimit";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import OpenAI from "openai";
@@ -10,7 +11,9 @@ import {
   buildAiCacheKey,
   buildDestinationOnlyCacheInput,
   buildPackingListCacheInput,
+  buildSafetyAdviceCacheInput,
   buildTripPlanCacheInput,
+  buildWeatherCacheInput,
   getCachedAiPayload,
   saveCachedAiPayload,
   type AiCacheFeature,
@@ -20,6 +23,7 @@ import {
   decodeGooglePubSubMessageData,
   fetchGooglePlaySubscriptionSnapshot,
   verifyAppleNotificationPayload,
+  verifyAppleSignedTransactionInfo,
   verifyGooglePubSubOidcToken,
 } from "./subscription-verification";
 import { resolveCustomsEntry } from "./customs-registry";
@@ -35,6 +39,21 @@ const CAMPING_APP_URL = (
   (process.env.NODE_ENV === "production" ? "" : "http://127.0.0.1:5001")
 ).trim();
 const SSO_TOKEN_TTL_SECONDS = 60;
+const isProduction = process.env.NODE_ENV === "production";
+
+const couponRedeemRateLimit = createRateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  message: "Too many coupon redemption attempts. Please try again later.",
+  keyGenerator: (req) => `coupon:${req.ip}:${req.user?.id ?? "anon"}`,
+});
+
+const aiRouteRateLimit = createRateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 30,
+  message: "Too many AI requests. Please wait a few minutes and try again.",
+  keyGenerator: (req) => `ai:${req.ip}:${req.user?.id ?? "anon"}`,
+});
 
 if (!openai) {
   console.warn("OPENAI_API_KEY is not set. AI-powered endpoints are disabled.");
@@ -87,6 +106,31 @@ async function getOwnedTripOr404(req: Request, res: Response, tripId: number) {
   return trip;
 }
 
+async function requireOwnerAccess(req: Request, res: Response): Promise<boolean> {
+  const configuredOwnerUsername = process.env.OWNER_USERNAME?.trim().toLowerCase();
+  if (!configuredOwnerUsername) {
+    res.status(503).json({ message: "Owner operations are not configured." });
+    return false;
+  }
+
+  const actorUsername = req.user?.username?.trim().toLowerCase();
+  if (actorUsername !== configuredOwnerUsername) {
+    res.status(403).json({ message: "Owner authorization required." });
+    return false;
+  }
+
+  const configuredOwnerSecret = process.env.OWNER_API_SECRET?.trim();
+  if (configuredOwnerSecret) {
+    const providedSecret = req.header("x-owner-secret");
+    if (!providedSecret || providedSecret !== configuredOwnerSecret) {
+      res.status(401).json({ message: "Owner secret required." });
+      return false;
+    }
+  }
+
+  return true;
+}
+
 async function aiChat(messages: { role: string; content: string }[], jsonMode = false): Promise<string> {
   if (!openai) {
     throw new AiUnavailableError();
@@ -115,7 +159,24 @@ function extractJson(text: string): string {
 }
 
 function handleAiError(res: Response, fallbackMessage: string, error: unknown) {
-  console.error(fallbackMessage, error);
+  try {
+    if (error instanceof z.ZodError) {
+      console.error(fallbackMessage, {
+        type: "ZodError",
+        issueCount: error.issues.length,
+        firstIssue: error.issues[0]?.message ?? "unknown",
+      });
+    } else if (error instanceof Error) {
+      console.error(fallbackMessage, {
+        type: error.name,
+        message: error.message,
+      });
+    } else {
+      console.error(fallbackMessage, { type: typeof error });
+    }
+  } catch (logError) {
+    console.error(fallbackMessage, String(error), String(logError));
+  }
   if (error instanceof AiUnavailableError) {
     return res.status(503).json({ message: "AI features are temporarily unavailable." });
   }
@@ -150,6 +211,324 @@ function buildStaticCustomsSummary(entry: {
     "## Important caution",
     "Always confirm the latest eligibility, deadlines, and airport or border instructions on the official government website before departure.",
   ].join("\n");
+}
+
+function getTripDayCount(trip: Awaited<ReturnType<typeof storage.getTrip>>) {
+  if (!trip?.startDate || !trip?.endDate) return 14;
+  const diffMs = trip.endDate.getTime() - trip.startDate.getTime();
+  return Math.max(1, Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1);
+}
+
+function buildGoogleSearchUrl(query: string) {
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
+function buildGoogleMapsUrl(query: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
+function normalizeAssistantCategory(input?: string | null): "activity" | "meal" | "transport" | "sightseeing" {
+  const normalized = (input ?? "").trim().toLowerCase();
+
+  if (
+    normalized.includes("meal") ||
+    normalized.includes("food") ||
+    normalized.includes("restaurant") ||
+    normalized.includes("cafe") ||
+    normalized.includes("caf\u00e9") ||
+    normalized.includes("bar") ||
+    normalized.includes("brunch") ||
+    normalized.includes("lunch") ||
+    normalized.includes("dinner")
+  ) {
+    return "meal";
+  }
+
+  if (
+    normalized.includes("transport") ||
+    normalized.includes("train") ||
+    normalized.includes("metro") ||
+    normalized.includes("bus") ||
+    normalized.includes("airport") ||
+    normalized.includes("station") ||
+    normalized.includes("taxi") ||
+    normalized.includes("rideshare")
+  ) {
+    return "transport";
+  }
+
+  if (
+    normalized.includes("sight") ||
+    normalized.includes("museum") ||
+    normalized.includes("landmark") ||
+    normalized.includes("viewpoint") ||
+    normalized.includes("monument") ||
+    normalized.includes("tour")
+  ) {
+    return "sightseeing";
+  }
+
+  return "activity";
+}
+
+function normalizeAssistantUrl(input?: string | null): string | null {
+  const value = input?.trim();
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeAssistantDayNumber(input: unknown, totalDays: number): number | null {
+  if (typeof input === "number" && Number.isFinite(input)) {
+    const value = Math.trunc(input);
+    return value >= 1 && value <= totalDays ? value : null;
+  }
+  if (typeof input === "string") {
+    const trimmed = input.trim().toLowerCase();
+    const numeric = trimmed.match(/\d+/);
+    if (numeric) {
+      const value = Number.parseInt(numeric[0], 10);
+      return Number.isFinite(value) && value >= 1 && value <= totalDays ? value : null;
+    }
+    const wordMap: Record<string, number> = {
+      first: 1,
+      second: 2,
+      third: 3,
+      fourth: 4,
+      fifth: 5,
+      sixth: 6,
+      seventh: 7,
+      eighth: 8,
+      ninth: 9,
+      tenth: 10,
+    };
+    const found = Object.entries(wordMap).find(([key]) => trimmed.includes(key))?.[1] ?? null;
+    return found && found <= totalDays ? found : null;
+  }
+  return null;
+}
+
+function normalizeAssistantTimeSlot(input?: string | null): string | null {
+  const raw = (input ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  const normalized = raw.replace(/[.,]/g, " ");
+
+  const labelMap: Record<string, string> = {
+    breakfast: "09:00",
+    brunch: "10:30",
+    lunch: "12:00",
+    noon: "12:00",
+    afternoon: "15:00",
+    dinner: "19:00",
+    evening: "20:00",
+    night: "20:00",
+  };
+  for (const [label, value] of Object.entries(labelMap)) {
+    if (normalized.includes(label)) {
+      return value;
+    }
+  }
+
+  const isoLike = normalized.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+  if (isoLike) {
+    const hour = Number.parseInt(isoLike[1], 10);
+    const minute = Number.parseInt(isoLike[2], 10);
+    return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+  }
+
+  const ampm = normalized.match(/\b(\d{1,2})(?::([0-5]\d))?\s*(am|pm)\b/);
+  if (ampm) {
+    let hour = Number.parseInt(ampm[1], 10);
+    const minute = Number.parseInt(ampm[2] ?? "0", 10);
+    const meridiem = ampm[3];
+    if (hour >= 1 && hour <= 12 && minute >= 0 && minute <= 59) {
+      if (meridiem === "pm" && hour !== 12) hour += 12;
+      if (meridiem === "am" && hour === 12) hour = 0;
+      return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+    }
+  }
+
+  const compact = normalized.match(/\b(\d{3,4})\b/);
+  if (compact) {
+    const value = compact[1];
+    const hour = Number.parseInt(value.length === 3 ? value.slice(0, 1) : value.slice(0, 2), 10);
+    const minute = Number.parseInt(value.slice(-2), 10);
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+    }
+  }
+
+  return null;
+}
+
+function pickAssistantIntro(answer: string, destination: string): string {
+  const blocks = answer
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  for (const block of blocks) {
+    const lowered = block.toLowerCase();
+    if (lowered.includes("would you like me to add")) continue;
+    if (/(googlesearchurl|googlemapsurl)/i.test(block)) continue;
+    if (/^\d+\.\s/.test(block)) continue;
+    return block;
+  }
+
+  return `Here are some recommended spots in ${destination}:`;
+}
+
+function buildAssistantSuggestionsAnswer(
+  destination: string,
+  baseAnswer: string,
+  suggestions: Array<{
+    title: string;
+    summary: string;
+    googleSearchUrl: string;
+    googleMapsUrl: string;
+  }>,
+): string {
+  const intro = pickAssistantIntro(baseAnswer, destination);
+  const lines: string[] = [intro, ""];
+
+  suggestions.forEach((suggestion, index) => {
+    lines.push(`${index + 1}. **${suggestion.title}**`);
+    if (suggestion.summary.trim()) {
+      lines.push(`   ${suggestion.summary.trim()}`);
+    }
+    lines.push(
+      `   [Google Search](${suggestion.googleSearchUrl}) | [Google Maps](${suggestion.googleMapsUrl})`,
+    );
+    lines.push("");
+  });
+
+  lines.push("Would you like me to add any of these to your itinerary?");
+  return lines.join("\n").trim();
+}
+
+function isItineraryAddRequest(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    /(add|include|put|save)\b/.test(normalized) &&
+    /\bitinerary\b/.test(normalized)
+  );
+}
+
+function answerClaimsItineraryAdd(answer: string): boolean {
+  const normalized = answer.toLowerCase();
+  return (
+    /\bi('| a)m\b.*\badd(ed|ing)\b/.test(normalized) ||
+    /\bi have\b.*\badd(ed|ing)\b/.test(normalized) ||
+    /\badded\b.*\bto your itinerary\b/.test(normalized)
+  );
+}
+
+function summarizeItineraryContext(
+  items: Array<{ dayNumber: number; timeSlot: string | null; title: string }>,
+): string {
+  if (!items.length) return "none";
+  return items
+    .slice(0, 20)
+    .map((item) => `Day ${item.dayNumber} ${item.timeSlot ?? "--:--"} - ${item.title}`)
+    .join(" | ");
+}
+
+function isDayTimeFollowUp(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    /\bday\s*\d+\b/.test(normalized) ||
+    /\b\d{1,2}(:\d{2})?\s*(am|pm)\b/.test(normalized) ||
+    /\b([01]?\d|2[0-3]):[0-5]\d\b/.test(normalized) ||
+    /\bat\s*\d{3,4}\b/.test(normalized) ||
+    /\b(breakfast|brunch|lunch|dinner|noon|evening|afternoon)\b/.test(normalized)
+  );
+}
+
+function shouldTreatAsAddRequest(
+  question: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+): boolean {
+  if (isItineraryAddRequest(question)) return true;
+  const normalized = question.toLowerCase();
+  const recentAssistantAskedToAdd = messages
+    .slice(-6)
+    .some(
+      (message) =>
+        message.role === "assistant" &&
+        /would you like me to add any of these to your itinerary/i.test(message.content),
+    );
+  if (recentAssistantAskedToAdd && /(add|yes|please|that|number|option|spot|place|#\d+)/.test(normalized)) {
+    return true;
+  }
+  if (!isDayTimeFollowUp(question)) return false;
+  return messages
+    .slice(-8)
+    .some(
+      (message) =>
+        message.role === "assistant" &&
+        /need a specific day and time/i.test(message.content),
+    );
+}
+
+function inferSuggestionFromConversation(
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  suggestions: Array<{ title: string; summary: string; category: "activity" | "meal" | "transport" | "sightseeing"; googleSearchUrl?: string | null; googleMapsUrl?: string | null }>,
+) {
+  const recentUserMessages = messages
+    .slice()
+    .reverse()
+    .filter((message) => message.role === "user")
+    .map((message) => message.content.toLowerCase());
+
+  for (const userText of recentUserMessages) {
+    const indexFromPhrase = userText.match(/\b(?:number|option|spot|place|item)\s*#?\s*(\d{1,2})\b/);
+    if (indexFromPhrase) {
+      const index = Number.parseInt(indexFromPhrase[1], 10);
+      if (Number.isFinite(index) && index >= 1 && index <= suggestions.length) {
+        return suggestions[index - 1];
+      }
+    }
+
+    const indexFromHash = userText.match(/#\s*(\d{1,2})\b/);
+    if (indexFromHash) {
+      const index = Number.parseInt(indexFromHash[1], 10);
+      if (Number.isFinite(index) && index >= 1 && index <= suggestions.length) {
+        return suggestions[index - 1];
+      }
+    }
+
+    const ordinalMap: Record<string, number> = {
+      first: 1,
+      second: 2,
+      third: 3,
+      fourth: 4,
+      fifth: 5,
+      sixth: 6,
+      seventh: 7,
+      eighth: 8,
+      ninth: 9,
+      tenth: 10,
+    };
+    for (const [word, index] of Object.entries(ordinalMap)) {
+      if (userText.includes(word) && /(option|spot|place|item|one)/.test(userText) && index <= suggestions.length) {
+        return suggestions[index - 1];
+      }
+    }
+
+    const matched = suggestions.find((suggestion) =>
+      userText.includes(suggestion.title.toLowerCase()),
+    );
+    if (matched) return matched;
+  }
+
+  return null;
 }
 
 
@@ -188,6 +567,21 @@ async function ensureAnnaiUserId(user: NonNullable<Express.User>): Promise<strin
     reqUserAssign(user, updatedUser.annaiUserId ?? annaiUserId);
   }
   return annaiUserId;
+}
+
+async function ensureAppleAppAccountToken(user: NonNullable<Express.User>): Promise<string> {
+  if (user.appleAppAccountToken) {
+    return user.appleAppAccountToken;
+  }
+
+  const appleAppAccountToken = randomUUID();
+  const updatedUser = await storage.updateUser(user.id, { appleAppAccountToken });
+  if (updatedUser?.appleAppAccountToken) {
+    user.appleAppAccountToken = updatedUser.appleAppAccountToken;
+  } else {
+    user.appleAppAccountToken = appleAppAccountToken;
+  }
+  return user.appleAppAccountToken;
 }
 
 function reqUserAssign(user: NonNullable<Express.User>, annaiUserId: string) {
@@ -251,6 +645,8 @@ async function resolveUserByBillingIdentifier(identifier?: string) {
   const normalized = identifier.trim();
   if (!normalized) return undefined;
 
+  const byAppleToken = await storage.getUserByAppleAppAccountToken(normalized);
+  if (byAppleToken) return byAppleToken;
   const byAnnaiId = await storage.getUserByAnnaiUserId(normalized);
   if (byAnnaiId) return byAnnaiId;
   return storage.getUserByUsername(normalized);
@@ -280,6 +676,18 @@ async function applySubscriptionEventUpdate(input: {
   });
 
   return subscription;
+}
+
+function toSubscriptionResponse(subscription: Awaited<ReturnType<typeof storage.getSubscription>>) {
+  if (!subscription) return null;
+  return {
+    status: subscription.status,
+    platform: subscription.platform ?? null,
+    productId: subscription.productId ?? null,
+    expiresAt: subscription.expiresAt ? subscription.expiresAt.toISOString() : null,
+    isActive: isSubscriptionActive(subscription.status, subscription.expiresAt),
+    isSandbox: subscription.isSandbox,
+  };
 }
 
 async function respondWithCachedAi<T>(
@@ -368,7 +776,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.coupons.redeem.path, requireAuth, async (req, res) => {
+  app.post(api.coupons.redeem.path, requireAuth, couponRedeemRateLimit, async (req, res) => {
     try {
       const { code } = api.coupons.redeem.input.parse(req.body);
       const normalizedCode = code.trim().toUpperCase();
@@ -433,26 +841,18 @@ export async function registerRoutes(
     ]);
 
     res.json({
-      subscription: subscription
-        ? {
-            status: subscription.status,
-            platform: subscription.platform ?? null,
-            productId: subscription.productId ?? null,
-            expiresAt: subscription.expiresAt ? subscription.expiresAt.toISOString() : null,
-            isActive: isSubscriptionActive(subscription.status, subscription.expiresAt),
-            isSandbox: subscription.isSandbox,
-          }
-        : null,
+      subscription: toSubscriptionResponse(subscription),
       entitlements,
     });
   });
 
   app.get(api.subscription.purchaseContext.path, requireAuth, async (req, res) => {
     const annaiUserId = await ensureAnnaiUserId(req.user!);
+    const appleAppAccountToken = await ensureAppleAppAccountToken(req.user!);
     res.json({
       productId: ANNAI_PRO_MONTHLY_PRODUCT_ID,
       apple: {
-        appAccountToken: annaiUserId,
+        appAccountToken: appleAppAccountToken,
         productId: ANNAI_PRO_MONTHLY_PRODUCT_ID,
       },
       google: {
@@ -461,6 +861,94 @@ export async function registerRoutes(
         productId: ANNAI_PRO_MONTHLY_PRODUCT_ID,
       },
     });
+  });
+
+  app.post(api.subscription.syncApple.path, requireAuth, async (req, res) => {
+    try {
+      const { signedTransactionInfo } = api.subscription.syncApple.input.parse(req.body);
+      const transaction = await verifyAppleSignedTransactionInfo(signedTransactionInfo);
+      const expectedToken = await ensureAppleAppAccountToken(req.user!);
+      const appAccountToken =
+        typeof transaction.appAccountToken === "string" ? transaction.appAccountToken : undefined;
+
+      if (appAccountToken && appAccountToken !== expectedToken) {
+        return res.status(403).json({ message: "This Apple purchase does not belong to the current user." });
+      }
+
+      const productId =
+        typeof transaction.productId === "string" ? transaction.productId : ANNAI_PRO_MONTHLY_PRODUCT_ID;
+      const originalTransactionId =
+        typeof transaction.originalTransactionId === "string"
+          ? transaction.originalTransactionId
+          : typeof transaction.transactionId === "string"
+            ? transaction.transactionId
+            : `apple:${req.user!.id}:${Date.now()}`;
+      const expiresAtRaw =
+        typeof transaction.expiresDate === "string"
+          ? transaction.expiresDate
+          : typeof transaction.expiresDate === "number"
+            ? new Date(transaction.expiresDate).toISOString()
+            : null;
+      const expiresAt = expiresAtRaw && !Number.isNaN(Date.parse(expiresAtRaw)) ? new Date(expiresAtRaw) : null;
+      const environment = typeof transaction.environment === "string" ? transaction.environment.toLowerCase() : "production";
+      const status = expiresAt && expiresAt.getTime() <= Date.now() ? "expired" : "active";
+
+      const subscription = await applySubscriptionEventUpdate({
+        user: req.user!,
+        status,
+        platform: "ios",
+        productId,
+        transactionId: originalTransactionId,
+        expiresAt,
+        isSandbox: environment === "sandbox",
+      });
+      const entitlements = await getEntitlements(storage, req.user!);
+      return res.json({
+        subscription: toSubscriptionResponse(subscription),
+        entitlements,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      return res.status(400).json({ message: `Unable to verify Apple purchase: ${String(err)}` });
+    }
+  });
+
+  app.post(api.subscription.syncGoogle.path, requireAuth, async (req, res) => {
+    try {
+      const { purchaseToken, productId } = api.subscription.syncGoogle.input.parse(req.body);
+      const annaiUserId = await ensureAnnaiUserId(req.user!);
+      const snapshot = await fetchGooglePlaySubscriptionSnapshot({
+        packageName: process.env.GOOGLE_PLAY_PACKAGE_NAME || "com.annai.travelplanner",
+        purchaseToken,
+        subscriptionId: productId,
+      });
+
+      if (snapshot.accountIdentifier && snapshot.accountIdentifier !== annaiUserId) {
+        return res.status(403).json({ message: "This Google Play purchase does not belong to the current user." });
+      }
+
+      const subscription = await applySubscriptionEventUpdate({
+        user: req.user!,
+        status: snapshot.mappedStatus,
+        platform: "android",
+        productId: snapshot.productId,
+        transactionId: snapshot.originalTransactionId,
+        expiresAt: snapshot.expiresAt ? new Date(snapshot.expiresAt) : null,
+        isSandbox: snapshot.isSandbox,
+      });
+      const entitlements = await getEntitlements(storage, req.user!);
+      return res.json({
+        subscription: toSubscriptionResponse(subscription),
+        entitlements,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      return res.status(400).json({ message: `Unable to verify Google Play purchase: ${String(err)}` });
+    }
   });
 
   app.get(api.trips.list.path, requireAuth, async (req, res) => {
@@ -549,6 +1037,29 @@ export async function registerRoutes(
     }
   });
 
+  app.patch(api.trips.updateBudgetTarget.path, requireAuth, async (req, res) => {
+    try {
+      const trip = await storage.getTrip(Number(req.params.id));
+      if (!trip || trip.userId !== req.user!.id) {
+        return res.status(404).json({ message: "Trip not found" });
+      }
+
+      const input = api.trips.updateBudgetTarget.input.parse(req.body);
+      const updated = await storage.updateTrip(Number(req.params.id), {
+        budgetTargetCents: input.budgetTargetCents,
+      });
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+          field: err.errors[0].path.join("."),
+        });
+      }
+      throw err;
+    }
+  });
+
   app.delete(api.trips.delete.path, requireAuth, async (req, res) => {
     const trip = await storage.getTrip(Number(req.params.id));
     if (!trip || trip.userId !== req.user!.id) {
@@ -559,16 +1070,20 @@ export async function registerRoutes(
   });
 
   app.get(api.packingLists.listByTrip.path, requireAuth, async (req, res) => {
+    const trip = await getOwnedTripOr404(req, res, Number(req.params.tripId));
+    if (!trip) return;
     const items = await storage.getPackingListsByTrip(Number(req.params.tripId));
     res.json(items);
   });
 
   app.post(api.packingLists.create.path, requireAuth, async (req, res) => {
     try {
+      const trip = await getOwnedTripOr404(req, res, Number(req.params.tripId));
+      if (!trip) return;
       const input = api.packingLists.create.input.parse(req.body);
       const item = await storage.createPackingList({
         ...input,
-        tripId: Number(req.params.tripId)
+        tripId: trip.id,
       });
       res.status(201).json(item);
     } catch (err) {
@@ -584,6 +1099,13 @@ export async function registerRoutes(
 
   app.put(api.packingLists.update.path, requireAuth, async (req, res) => {
     try {
+      const existingItem = await storage.getPackingList(Number(req.params.id));
+      if (!existingItem) {
+        return res.status(404).json({ message: "Packing list item not found" });
+      }
+      const trip = await getOwnedTripOr404(req, res, existingItem.tripId);
+      if (!trip) return;
+
       const input = api.packingLists.update.input.parse(req.body);
       const item = await storage.updatePackingList(Number(req.params.id), input);
       if (!item) {
@@ -602,11 +1124,17 @@ export async function registerRoutes(
   });
 
   app.delete(api.packingLists.delete.path, requireAuth, async (req, res) => {
+    const existingItem = await storage.getPackingList(Number(req.params.id));
+    if (!existingItem) {
+      return res.status(404).json({ message: "Packing list item not found" });
+    }
+    const trip = await getOwnedTripOr404(req, res, existingItem.tripId);
+    if (!trip) return;
     await storage.deletePackingList(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.post(api.ai.generatePackingList.path, requireAuth, async (req, res) => {
+  app.post(api.ai.generatePackingList.path, requireAuth, aiRouteRateLimit, async (req, res) => {
     try {
       const entitlements = await getEntitlements(storage, req.user!);
       if (!requireFeature(res, entitlements, "ai_packing")) return;
@@ -624,7 +1152,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.ai.tripPlan.path, requireAuth, async (req, res) => {
+  app.post(api.ai.tripPlan.path, requireAuth, aiRouteRateLimit, async (req, res) => {
     try {
       const entitlements = await getEntitlements(storage, req.user!);
       if (!requireFeature(res, entitlements, "ai_itinerary")) return;
@@ -658,7 +1186,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.ai.culturalTips.path, requireAuth, async (req, res) => {
+  app.post(api.ai.culturalTips.path, requireAuth, aiRouteRateLimit, async (req, res) => {
     try {
       const entitlements = await getEntitlements(storage, req.user!);
       if (!requireFeature(res, entitlements, "ai_safety")) return;
@@ -678,25 +1206,31 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.ai.safetyAdvice.path, requireAuth, async (req, res) => {
+  app.post(api.ai.safetyAdvice.path, requireAuth, aiRouteRateLimit, async (req, res) => {
     try {
       const entitlements = await getEntitlements(storage, req.user!);
       if (!requireFeature(res, entitlements, "ai_safety")) return;
       const { destination, citizenship } = api.ai.safetyAdvice.input.parse(req.body);
       const effectiveCitizenship = citizenship?.trim() || req.user!.citizenship || undefined;
-      
-      const raw = await aiChat([
-        { role: "system", content: `You are a travel safety and diplomatic expert. Provide concise advice on areas to avoid, common scams, and general safety. ALSO, if provided with a citizenship, find and include the location and contact information for the nearest embassy or consulate of that country in the destination. Format with clear markdown headings. ${getAiLanguageInstruction(req.user!)}` },
-        { role: "user", content: `What are the safety concerns and embassy information for a ${effectiveCitizenship || "traveler"} visiting ${destination}?` }
-      ]);
-      const advice = stripThinkTags(raw || "No safety advice available.");
-      res.json({ advice });
+      const cachePayload = buildSafetyAdviceCacheInput({
+        destination,
+        citizenship: effectiveCitizenship,
+      });
+
+      await respondWithCachedAi(res, "safety-advice", cachePayload, async () => {
+        const raw = await aiChat([
+          { role: "system", content: `You are a travel safety and diplomatic expert. Provide concise advice on areas to avoid, common scams, and general safety. ALSO, if provided with a citizenship, find and include the location and contact information for the nearest embassy or consulate of that country in the destination. Format with clear markdown headings. ${getAiLanguageInstruction(req.user!)}` },
+          { role: "user", content: `What are the safety concerns and embassy information for a ${effectiveCitizenship || "traveler"} visiting ${destination}?` }
+        ]);
+        const advice = stripThinkTags(raw || "No safety advice available.");
+        return { advice };
+      });
     } catch (error) {
       return handleAiError(res, "Failed to fetch safety advice", error);
     }
   });
 
-  app.post(api.ai.safetyMap.path, requireAuth, async (req, res) => {
+  app.post(api.ai.safetyMap.path, requireAuth, aiRouteRateLimit, async (req, res) => {
     try {
       const entitlements = await getEntitlements(storage, req.user!);
       if (!requireFeature(res, entitlements, "google_maps")) return;
@@ -705,29 +1239,60 @@ export async function registerRoutes(
       const content = await aiChat([
         {
           role: "system",
-          content: `You are a travel safety data analyst. Return a JSON object with:
-1. "center": {"lat": number, "lng": number} — city center coordinates.
-2. "zones": array of 6 areas, each with: "name" (string), "lat" (number), "lng" (number), "radius" (number, 300-1500 meters), "level" ("safe"|"caution"|"avoid"), "description" (one short sentence).
-Include a mix of safe, caution, and avoid areas. Use real neighborhood names and accurate coordinates. Use ${getLanguageName(getUserLanguage(req.user!))} for any text fields. Return ONLY valid JSON.`
+          content: `You are a travel safety data analyst. Return ONLY valid JSON with this exact shape:
+{
+  "center": { "lat": number, "lng": number },
+  "summary": string,
+  "zones": [
+    {
+      "name": string,
+      "lat": number,
+      "lng": number,
+      "radius": number,
+      "level": "safe" | "caution" | "avoid",
+      "description": string,
+      "commonIncidents": string[],
+      "travelerNote": string,
+      "timingNote": string
+    }
+  ]
+}
+
+Rules:
+- Return 6 zones total.
+- Include a realistic mix of safe, caution, and avoid areas.
+- Use real neighborhood or district names when possible.
+- Use accurate coordinates near the named area.
+- radius must be between 250 and 1500 meters.
+- description must be one concise sentence explaining the safety context.
+- commonIncidents must contain 1 to 3 short plain-language items, such as pickpocketing, nightlife disturbances, car break-ins, aggressive scams, or low concern.
+- travelerNote must be a specific practical note for visitors.
+- timingNote must say when the concern is usually highest or lowest, such as "Late night weekends" or "Generally calm during the day".
+- If a place is broadly safe, say that clearly instead of inventing crime.
+- Use ${getLanguageName(getUserLanguage(req.user!))} for all text fields.`
         },
         { role: "user", content: `Safety zone data for ${destination}.` }
       ], true);
       if (!content) throw new Error("No response from AI");
 
-      res.json(JSON.parse(content));
+      res.json(api.ai.safetyMap.responses[200].parse(JSON.parse(content)));
     } catch (error) {
       return handleAiError(res, "Failed to generate safety map data", error);
     }
   });
 
   app.get(api.budgetItems.listByTrip.path, requireAuth, async (req, res) => {
+    const trip = await getOwnedTripOr404(req, res, Number(req.params.tripId));
+    if (!trip) return;
     const items = await storage.getBudgetItemsByTrip(Number(req.params.tripId));
     res.json(items);
   });
   app.post(api.budgetItems.create.path, requireAuth, async (req, res) => {
     try {
+      const trip = await getOwnedTripOr404(req, res, Number(req.params.tripId));
+      if (!trip) return;
       const input = api.budgetItems.create.input.parse(req.body);
-      const item = await storage.createBudgetItem({ ...input, tripId: Number(req.params.tripId) });
+      const item = await storage.createBudgetItem({ ...input, tripId: trip.id });
       res.status(201).json(item);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
@@ -736,6 +1301,13 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
   });
   app.put(api.budgetItems.update.path, requireAuth, async (req, res) => {
     try {
+      const existingItem = await storage.getBudgetItem(Number(req.params.id));
+      if (!existingItem) {
+        return res.status(404).json({ message: "Budget item not found" });
+      }
+      const trip = await getOwnedTripOr404(req, res, existingItem.tripId);
+      if (!trip) return;
+
       const input = api.budgetItems.update.input.parse(req.body);
       const item = await storage.updateBudgetItem(Number(req.params.id), input);
       res.json(item);
@@ -745,18 +1317,28 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
     }
   });
   app.delete(api.budgetItems.delete.path, requireAuth, async (req, res) => {
+    const existingItem = await storage.getBudgetItem(Number(req.params.id));
+    if (!existingItem) {
+      return res.status(404).json({ message: "Budget item not found" });
+    }
+    const trip = await getOwnedTripOr404(req, res, existingItem.tripId);
+    if (!trip) return;
     await storage.deleteBudgetItem(Number(req.params.id));
     res.status(204).send();
   });
 
   app.get(api.travelDocuments.listByTrip.path, requireAuth, async (req, res) => {
+    const trip = await getOwnedTripOr404(req, res, Number(req.params.tripId));
+    if (!trip) return;
     const docs = await storage.getTravelDocumentsByTrip(Number(req.params.tripId));
     res.json(docs);
   });
   app.post(api.travelDocuments.create.path, requireAuth, async (req, res) => {
     try {
+      const trip = await getOwnedTripOr404(req, res, Number(req.params.tripId));
+      if (!trip) return;
       const input = api.travelDocuments.create.input.parse(req.body);
-      const doc = await storage.createTravelDocument({ ...input, tripId: Number(req.params.tripId) });
+      const doc = await storage.createTravelDocument({ ...input, tripId: trip.id });
       res.status(201).json(doc);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
@@ -765,6 +1347,13 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
   });
   app.put(api.travelDocuments.update.path, requireAuth, async (req, res) => {
     try {
+      const existingDoc = await storage.getTravelDocument(Number(req.params.id));
+      if (!existingDoc) {
+        return res.status(404).json({ message: "Travel document not found" });
+      }
+      const trip = await getOwnedTripOr404(req, res, existingDoc.tripId);
+      if (!trip) return;
+
       const input = api.travelDocuments.update.input.parse(req.body);
       const doc = await storage.updateTravelDocument(Number(req.params.id), input);
       res.json(doc);
@@ -774,18 +1363,28 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
     }
   });
   app.delete(api.travelDocuments.delete.path, requireAuth, async (req, res) => {
+    const existingDoc = await storage.getTravelDocument(Number(req.params.id));
+    if (!existingDoc) {
+      return res.status(404).json({ message: "Travel document not found" });
+    }
+    const trip = await getOwnedTripOr404(req, res, existingDoc.tripId);
+    if (!trip) return;
     await storage.deleteTravelDocument(Number(req.params.id));
     res.status(204).send();
   });
 
   app.get(api.itineraryItems.listByTrip.path, requireAuth, async (req, res) => {
+    const trip = await getOwnedTripOr404(req, res, Number(req.params.tripId));
+    if (!trip) return;
     const items = await storage.getItineraryItemsByTrip(Number(req.params.tripId));
     res.json(items);
   });
   app.post(api.itineraryItems.create.path, requireAuth, async (req, res) => {
     try {
+      const trip = await getOwnedTripOr404(req, res, Number(req.params.tripId));
+      if (!trip) return;
       const input = api.itineraryItems.create.input.parse(req.body);
-      const item = await storage.createItineraryItem({ ...input, tripId: Number(req.params.tripId) });
+      const item = await storage.createItineraryItem({ ...input, tripId: trip.id });
       res.status(201).json(item);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
@@ -794,6 +1393,13 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
   });
   app.put(api.itineraryItems.update.path, requireAuth, async (req, res) => {
     try {
+      const existingItem = await storage.getItineraryItem(Number(req.params.id));
+      if (!existingItem) {
+        return res.status(404).json({ message: "Itinerary item not found" });
+      }
+      const trip = await getOwnedTripOr404(req, res, existingItem.tripId);
+      if (!trip) return;
+
       const input = api.itineraryItems.update.input.parse(req.body);
       const item = await storage.updateItineraryItem(Number(req.params.id), input);
       res.json(item);
@@ -803,11 +1409,17 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
     }
   });
   app.delete(api.itineraryItems.delete.path, requireAuth, async (req, res) => {
+    const existingItem = await storage.getItineraryItem(Number(req.params.id));
+    if (!existingItem) {
+      return res.status(404).json({ message: "Itinerary item not found" });
+    }
+    const trip = await getOwnedTripOr404(req, res, existingItem.tripId);
+    if (!trip) return;
     await storage.deleteItineraryItem(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.post(api.ai.phrases.path, requireAuth, async (req, res) => {
+  app.post(api.ai.phrases.path, requireAuth, aiRouteRateLimit, async (req, res) => {
     try {
       const entitlements = await getEntitlements(storage, req.user!);
       if (!requireFeature(res, entitlements, "ai_phrases")) return;
@@ -827,24 +1439,28 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
     }
   });
 
-  app.post(api.ai.weather.path, requireAuth, async (req, res) => {
+  app.post(api.ai.weather.path, requireAuth, aiRouteRateLimit, async (req, res) => {
     try {
       const entitlements = await getEntitlements(storage, req.user!);
       if (!requireFeature(res, entitlements, "ai_weather")) return;
       const { destination, startDate, endDate } = api.ai.weather.input.parse(req.body);
       const dateRange = startDate && endDate ? `from ${startDate} to ${endDate}` : "for an upcoming trip";
-      const raw = await aiChat([
-        { role: "system", content: `You are a travel weather advisor. Provide a helpful weather forecast summary for the destination and time period. Include expected temperatures, rainfall, what to wear, and any weather-related travel tips. Format with markdown. ${getAiLanguageInstruction(req.user!)}` },
-        { role: "user", content: `What weather should a traveler expect in ${destination} ${dateRange}? Include temperature ranges, precipitation, clothing recommendations, and any weather warnings.` }
-      ]);
-      const forecast = stripThinkTags(raw || "No forecast available.");
-      res.json({ forecast });
+      const cachePayload = buildWeatherCacheInput({ destination, startDate, endDate });
+
+      await respondWithCachedAi(res, "weather", cachePayload, async () => {
+        const raw = await aiChat([
+          { role: "system", content: `You are a travel weather advisor. Provide a helpful weather forecast summary for the destination and time period. Include expected temperatures, rainfall, what to wear, and any weather-related travel tips. Format with markdown. ${getAiLanguageInstruction(req.user!)}` },
+          { role: "user", content: `What weather should a traveler expect in ${destination} ${dateRange}? Include temperature ranges, precipitation, clothing recommendations, and any weather warnings.` }
+        ]);
+        const forecast = stripThinkTags(raw || "No forecast available.");
+        return { forecast };
+      });
     } catch (error) {
       return handleAiError(res, "Failed to generate weather forecast", error);
     }
   });
 
-  app.post(api.ai.customsEntry.path, requireAuth, async (req, res) => {
+  app.post(api.ai.customsEntry.path, requireAuth, aiRouteRateLimit, async (req, res) => {
     try {
       const entitlements = await getEntitlements(storage, req.user!);
       if (!requireFeature(res, entitlements, "ai_safety")) return;
@@ -979,50 +1595,210 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
     }
   });
 
-  app.post(api.ai.assistant.path, requireAuth, async (req, res) => {
+  app.post(api.ai.assistant.path, requireAuth, aiRouteRateLimit, async (req, res) => {
     try {
       const entitlements = await getEntitlements(storage, req.user!);
       if (!requireFeature(res, entitlements, "ai_itinerary")) return;
 
-      const { tripId, question } = api.ai.assistant.input.parse(req.body);
+      const { tripId, question, messages = [], activeSuggestions = [] } = api.ai.assistant.input.parse(req.body);
       const trip = await getOwnedTripOr404(req, res, tripId);
       if (!trip) return;
+      const itineraryItems = await storage.getItineraryItemsByTrip(trip.id);
+      const itineraryContext = summarizeItineraryContext(itineraryItems);
+      const totalDays = getTripDayCount(trip);
+      const tripDayLabels = Array.from({ length: totalDays }, (_, index) => {
+        const dayNumber = index + 1;
+        if (!trip.startDate) return `Day ${dayNumber}`;
+        const date = new Date(trip.startDate.getTime() + index * 24 * 60 * 60 * 1000);
+        return `Day ${dayNumber}: ${date.toISOString().slice(0, 10)}`;
+      }).join(" | ");
 
-      const answer = stripThinkTags(
-        await aiChat([
-          {
-            role: "system",
-            content: [
-              "You are Annai Travel Assistant.",
-              "Answer immediate travel-planning questions with concise, practical guidance.",
-              "Use the active trip context when it matters.",
-              "If information can change in real life, say the traveler should verify it before booking or departure.",
-              "When you mention a specific restaurant, attraction, hotel, neighborhood, station, or venue, include markdown links to Google Search and Google Maps when helpful.",
-              "Format those links like [Google Search](https://www.google.com/search?q=...) and [Google Maps](https://www.google.com/maps/search/?api=1&query=...).",
-              "For recommendation lists, prefer short bullet points so the response is easy to scan on mobile.",
-              getAiLanguageInstruction(req.user!),
-            ].join(" "),
-          },
-          {
-            role: "user",
-            content: [
-              `Trip destination: ${trip.destination}`,
-              `Trip dates: ${trip.startDate ? trip.startDate.toISOString().slice(0, 10) : "unknown"} to ${trip.endDate ? trip.endDate.toISOString().slice(0, 10) : "unknown"}`,
-              `Traveler citizenship: ${req.user!.citizenship ?? trip.citizenship ?? "not provided"}`,
-              `Trip notes: ${trip.notes ?? "none"}`,
-              `Question: ${question}`,
-            ].join("\n"),
-          },
-        ]),
-      );
+      const assistantSchema = z.object({
+        answer: z.string().optional(),
+        suggestions: z.array(z.object({
+          title: z.string().optional(),
+          summary: z.string().optional(),
+          category: z.string().optional(),
+          googleSearchUrl: z.string().nullable().optional(),
+          googleMapsUrl: z.string().nullable().optional(),
+        })).default([]),
+        shouldOfferItineraryAdd: z.boolean().optional(),
+        pendingAction: z.object({
+          type: z.string().optional(),
+          title: z.string().optional(),
+          description: z.string().nullable().optional(),
+          category: z.string().optional(),
+          dayNumber: z.union([z.number(), z.string()]).optional(),
+          timeSlot: z.string().optional(),
+          googlePlaceUrl: z.string().nullable().optional(),
+        }).nullable().optional(),
+      });
 
-      res.json({ answer: answer || "No answer available." });
+      const raw = await aiChat([
+        {
+          role: "system",
+          content: [
+            "You are Annai Travel Assistant.",
+            "Return ONLY valid JSON.",
+            "Keys: answer, suggestions, shouldOfferItineraryAdd, pendingAction.",
+            "answer must be concise markdown for the traveler.",
+            "suggestions must be an array of recommendation objects when the user asks for places or options.",
+            "Each suggestion object must include title, summary, category, optional googleSearchUrl, optional googleMapsUrl.",
+            "If suggestions are returned, set shouldOfferItineraryAdd to true and end the answer with a short follow-up like 'Would you like me to add any of these to your itinerary?'",
+            "pendingAction must be null unless the user explicitly asks to add something to the itinerary and the request is clear enough to execute safely.",
+            "If the user asks to add a place, use the current activeSuggestions list when resolving phrases like 'number 2', 'that place', or a named place from the previous recommendations.",
+            "When creating pendingAction, set type to add_to_itinerary.",
+            "pendingAction.dayNumber must be a trip-relative day number from 1 to the trip length.",
+            "pendingAction.timeSlot must be 24-hour HH:MM.",
+            "Map broad meal times to sensible defaults: breakfast 09:00, brunch 10:30, lunch 12:00, afternoon 15:00, dinner 19:00, evening 20:00.",
+            "Do not claim an item was added unless you provide a valid pendingAction for this turn.",
+            "If the request is ambiguous, do not create pendingAction; instead ask one short follow-up question in answer.",
+            "Use the trip context. If something can change in real life, tell the traveler to verify before booking or departure.",
+            getAiLanguageInstruction(req.user!),
+          ].join(" "),
+        },
+        {
+          role: "user",
+          content: [
+            `Trip destination: ${trip.destination}`,
+            `Trip dates: ${trip.startDate ? trip.startDate.toISOString().slice(0, 10) : "unknown"} to ${trip.endDate ? trip.endDate.toISOString().slice(0, 10) : "unknown"}`,
+            `Trip day labels: ${tripDayLabels}`,
+            `Trip length: ${totalDays} days`,
+            `Traveler citizenship: ${req.user!.citizenship ?? trip.citizenship ?? "not provided"}`,
+            `Trip notes: ${trip.notes ?? "none"}`,
+            `Current itinerary items: ${itineraryContext}`,
+            `Recent conversation: ${JSON.stringify(messages.slice(-8))}`,
+            `Active suggestions: ${JSON.stringify(activeSuggestions.slice(-8))}`,
+            `Latest user question: ${question}`,
+          ].join("\n"),
+        },
+      ], true);
+      if (!raw) throw new Error("No response from AI");
+
+      let parsed: z.infer<typeof assistantSchema>;
+      try {
+        parsed = assistantSchema.parse(JSON.parse(extractJson(raw)));
+      } catch (parseError) {
+        const fallbackAnswer = stripThinkTags(raw || "").trim();
+        console.warn("Assistant structured parse fallback", parseError);
+        return res.json({
+          answer: fallbackAnswer || "I can help with that. Try asking again with a little more detail.",
+          suggestions: [],
+          shouldOfferItineraryAdd: false,
+          createdItineraryItem: null,
+          pendingAction: null,
+        });
+      }
+      const suggestions = parsed.suggestions
+        .filter((suggestion) => Boolean(suggestion.title?.trim()) && Boolean(suggestion.summary?.trim()))
+        .map((suggestion) => {
+        const title = suggestion.title!.trim();
+        const summary = suggestion.summary!.trim();
+        const fallbackQuery = `${title} ${trip.destination}`;
+        return {
+          title,
+          summary,
+          category: normalizeAssistantCategory(suggestion.category),
+          // Always use canonical Google URLs so short/dynamic links never break in UI.
+          googleSearchUrl: buildGoogleSearchUrl(fallbackQuery),
+          googleMapsUrl: buildGoogleMapsUrl(fallbackQuery),
+        };
+      });
+
+      let createdItineraryItem: Awaited<ReturnType<typeof storage.createItineraryItem>> | null = null;
+      const addRequested = shouldTreatAsAddRequest(question, messages);
+      let pendingAction =
+        parsed.pendingAction &&
+        parsed.pendingAction.type === "add_to_itinerary" &&
+        parsed.pendingAction.title?.trim()
+          ? {
+              type: "add_to_itinerary" as const,
+              title: parsed.pendingAction.title.trim(),
+              description: parsed.pendingAction.description?.trim() || null,
+              category: normalizeAssistantCategory(parsed.pendingAction.category),
+              dayNumber: normalizeAssistantDayNumber(parsed.pendingAction.dayNumber, totalDays),
+              timeSlot: normalizeAssistantTimeSlot(parsed.pendingAction.timeSlot),
+              googlePlaceUrl: normalizeAssistantUrl(parsed.pendingAction.googlePlaceUrl),
+            }
+          : null;
+      if (!pendingAction && addRequested) {
+        const inferredSuggestion = inferSuggestionFromConversation(messages, suggestions) ??
+          inferSuggestionFromConversation(messages, activeSuggestions);
+        const inferredDay = normalizeAssistantDayNumber(question, totalDays);
+        const inferredTime = normalizeAssistantTimeSlot(question);
+        if (inferredSuggestion && inferredDay && inferredTime) {
+          pendingAction = {
+            type: "add_to_itinerary",
+            title: inferredSuggestion.title,
+            description: inferredSuggestion.summary,
+            category: inferredSuggestion.category,
+            dayNumber: inferredDay,
+            timeSlot: inferredTime,
+            googlePlaceUrl: normalizeAssistantUrl(inferredSuggestion.googleMapsUrl) ??
+              normalizeAssistantUrl(inferredSuggestion.googleSearchUrl),
+          };
+        }
+      }
+      let answer = stripThinkTags(parsed.answer || "No answer available.");
+      if (suggestions.length > 0) {
+        answer = buildAssistantSuggestionsAnswer(trip.destination, answer, suggestions);
+      }
+
+      if (
+        pendingAction &&
+        typeof pendingAction.dayNumber === "number" &&
+        typeof pendingAction.timeSlot === "string"
+      ) {
+        const action = pendingAction;
+        const dayNumber = action.dayNumber as number;
+        const timeSlot = action.timeSlot;
+        const matchedSuggestion = suggestions.find(
+          (suggestion) => suggestion.title.trim().toLowerCase() === action.title.trim().toLowerCase(),
+        ) ?? activeSuggestions.find(
+          (suggestion) => suggestion.title.trim().toLowerCase() === action.title.trim().toLowerCase(),
+        );
+
+        createdItineraryItem = await storage.createItineraryItem({
+          tripId: trip.id,
+          dayNumber,
+          timeSlot,
+          title: action.title,
+          description: action.description?.trim() || matchedSuggestion?.summary || null,
+          category: action.category,
+          googlePlaceUrl:
+            normalizeAssistantUrl(action.googlePlaceUrl) ??
+            matchedSuggestion?.googleMapsUrl ??
+            matchedSuggestion?.googleSearchUrl ??
+            buildGoogleMapsUrl(`${action.title} ${trip.destination}`),
+          sourceFingerprint: null,
+        });
+        pendingAction = null;
+        answer = `${answer}\n\nAdded **${createdItineraryItem.title}** to Day ${createdItineraryItem.dayNumber} at ${createdItineraryItem.timeSlot}.`;
+      } else if (pendingAction && (!pendingAction.dayNumber || !pendingAction.timeSlot)) {
+        pendingAction = null;
+      }
+
+      if (!createdItineraryItem && addRequested) {
+        answer = "I can add that, but I need a specific day and time. Example: `Add Prater Garten to Day 2 at 12:00`.";
+      } else if (!createdItineraryItem && answerClaimsItineraryAdd(answer)) {
+        answer = "I have not added anything yet. Tell me the place, day, and time, and I will add it to your itinerary.";
+      }
+
+      const response = {
+        answer,
+        suggestions,
+        shouldOfferItineraryAdd: Boolean(parsed.shouldOfferItineraryAdd) || suggestions.length > 0,
+        createdItineraryItem,
+        pendingAction,
+      };
+
+      res.json(response);
     } catch (error) {
       return handleAiError(res, "Failed to generate assistant response", error);
     }
   });
 
-  app.post(api.bookingImport.preview.path, requireAuth, async (req, res) => {
+  app.post(api.bookingImport.preview.path, requireAuth, aiRouteRateLimit, async (req, res) => {
     try {
       const entitlements = await getEntitlements(storage, req.user!);
       if (!requireFeature(res, entitlements, "ai_itinerary")) return;
@@ -1118,10 +1894,13 @@ Include a mix of safe, caution, and avoid areas. Use real neighborhood names and
   });
 
   app.post("/api/subscription/mock-update", requireAuth, async (req, res) => {
-    const actorEntitlements = await getEntitlements(storage, req.user!);
-    if (!actorEntitlements.hasProAccess && !req.user!.proAccess) {
-      return res.status(403).json({ message: "Manual subscription updates are reserved for paid/admin testing accounts." });
+    const mockUpdatesAllowed =
+      !isProduction || process.env.ALLOW_MOCK_SUBSCRIPTION_UPDATES === "true";
+    if (!mockUpdatesAllowed) {
+      return res.status(404).json({ message: "Not found" });
     }
+    const hasOwnerAccess = await requireOwnerAccess(req, res);
+    if (!hasOwnerAccess) return;
 
     const payload = z.object({
       username: z.string().min(1),

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -57,6 +57,8 @@ export default function BudgetTracker() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
+  const [showBudgetForm, setShowBudgetForm] = useState(false);
+  const [budgetAmount, setBudgetAmount] = useState("");
   const { t, language } = useI18n();
   const locale = language === "es" ? "es-ES" : language === "zh" ? "zh-CN" : language === "ja" ? "ja-JP" : language === "ko" ? "ko-KR" : "en-US";
 
@@ -75,6 +77,18 @@ export default function BudgetTracker() {
     resolver: zodResolver(formSchema),
     defaultValues: { description: "", amount: "", category: "food", currency: "USD" },
   });
+
+  useEffect(() => {
+    if (!trip) {
+      return;
+    }
+
+    setBudgetAmount(
+      typeof trip.budgetTargetCents === "number"
+        ? (trip.budgetTargetCents / 100).toFixed(2)
+        : "",
+    );
+  }, [trip]);
 
   const createMutation = useMutation({
     mutationFn: async (data: z.infer<typeof formSchema>) => {
@@ -98,6 +112,33 @@ export default function BudgetTracker() {
     },
   });
 
+  const updateBudgetTargetMutation = useMutation({
+    mutationFn: async (budgetTargetCents: number | null) => {
+      const url = buildUrl(api.trips.updateBudgetTarget.path, { id: tripId });
+      const res = await apiRequest(api.trips.updateBudgetTarget.method, url, { budgetTargetCents });
+      return api.trips.updateBudgetTarget.responses[200].parse(await res.json());
+    },
+    onSuccess: (updatedTrip, budgetTargetCents) => {
+      queryClient.invalidateQueries({ queryKey: [api.trips.list.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/trips", tripId] });
+      queryClient.setQueryData(["/api/trips", tripId], updatedTrip);
+      setBudgetAmount(
+        typeof updatedTrip.budgetTargetCents === "number"
+          ? (updatedTrip.budgetTargetCents / 100).toFixed(2)
+          : "",
+      );
+      setShowBudgetForm(false);
+      toast({
+        title: budgetTargetCents === null ? t("budget.budgetCleared") : t("budget.budgetSaved"),
+        description:
+          budgetTargetCents === null ? undefined : t("budget.budgetSavedBody"),
+      });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/budget-items/${id}`);
@@ -110,6 +151,34 @@ export default function BudgetTracker() {
 
   const onSubmit = (data: z.infer<typeof formSchema>) => {
     createMutation.mutate(data);
+  };
+
+  const onSaveBudget = () => {
+    const normalizedAmount = budgetAmount.trim();
+    if (!normalizedAmount) {
+      toast({
+        title: "Budget amount required",
+        description: "Enter a total budget or clear the existing one.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const parsedAmount = Number.parseFloat(normalizedAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      toast({
+        title: "Invalid budget amount",
+        description: "Enter a valid number greater than or equal to zero.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    updateBudgetTargetMutation.mutate(Math.round(parsedAmount * 100));
+  };
+
+  const onClearBudget = () => {
+    updateBudgetTargetMutation.mutate(null);
   };
 
   if (tripLoading || itemsLoading) {
@@ -125,6 +194,14 @@ export default function BudgetTracker() {
   }
 
   const totalCents = budgetItems.reduce((sum, item) => sum + item.amount, 0);
+  const budgetTargetCents = trip.budgetTargetCents ?? null;
+  const remainingCents = budgetTargetCents === null ? null : budgetTargetCents - totalCents;
+  const overBudgetCents = remainingCents !== null && remainingCents < 0 ? Math.abs(remainingCents) : 0;
+  const progressPercent =
+    budgetTargetCents && budgetTargetCents > 0
+      ? Math.min(Math.round((totalCents / budgetTargetCents) * 100), 100)
+      : 0;
+  const activeCurrency = budgetItems[0]?.currency || "USD";
 
   const categoryTotals = CATEGORIES.map(cat => {
     const items = budgetItems.filter(b => b.category === cat.value);
@@ -150,13 +227,172 @@ export default function BudgetTracker() {
             </h1>
             <p className="text-muted-foreground text-lg">{trip.destination}</p>
           </div>
-          <Button
-            onClick={() => setShowForm(!showForm)}
-            className="rounded-xl"
-            data-testid="button-add-expense"
-          >
-            <Plus className="h-4 w-4 mr-2" /> {t("budget.add")}
-          </Button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button
+              onClick={() => setShowBudgetForm((current) => !current)}
+              className="rounded-xl"
+              data-testid="button-toggle-trip-budget"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              {budgetTargetCents === null ? t("budget.setTripBudget") : t("budget.editTripBudget")}
+            </Button>
+            <Button
+              onClick={() => setShowForm(!showForm)}
+              className="rounded-xl"
+              data-testid="button-add-expense"
+            >
+              <Plus className="h-4 w-4 mr-2" /> {t("budget.add")}
+            </Button>
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {showBudgetForm && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden mb-8"
+            >
+              <Card className="p-6 rounded-2xl">
+                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-4 items-end">
+                  <div>
+                    <label className="text-sm font-medium block mb-2" htmlFor="trip-budget-amount">
+                      {t("budget.budgetAmount")}
+                    </label>
+                    <Input
+                      id="trip-budget-amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="10000.00"
+                      value={budgetAmount}
+                      onChange={(event) => setBudgetAmount(event.target.value)}
+                      data-testid="input-trip-budget-amount"
+                    />
+                  </div>
+                  <div className="flex gap-2 flex-wrap sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setBudgetAmount(
+                          typeof trip.budgetTargetCents === "number"
+                            ? (trip.budgetTargetCents / 100).toFixed(2)
+                            : "",
+                        );
+                        setShowBudgetForm(false);
+                      }}
+                      data-testid="button-cancel-trip-budget"
+                    >
+                      {t("budget.cancel")}
+                    </Button>
+                    {budgetTargetCents !== null && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={onClearBudget}
+                        disabled={updateBudgetTargetMutation.isPending}
+                        data-testid="button-clear-trip-budget"
+                      >
+                        {t("budget.clearBudget")}
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      onClick={onSaveBudget}
+                      disabled={updateBudgetTargetMutation.isPending}
+                      data-testid="button-save-trip-budget"
+                    >
+                      {updateBudgetTargetMutation.isPending ? "Saving..." : t("budget.saveBudget")}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+          <Card className="p-6 rounded-2xl">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-accent/10 rounded-xl text-accent">
+                <TrendingUp className="h-5 w-5" />
+              </div>
+              <span className="text-muted-foreground font-medium">{t("budget.tripBudget")}</span>
+            </div>
+            {budgetTargetCents === null ? (
+              <>
+                <p className="text-2xl font-bold text-foreground">{t("budget.noBudget")}</p>
+                <p className="text-sm text-muted-foreground mt-1">{t("budget.noBudgetBody")}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-4xl font-bold text-foreground" data-testid="text-trip-budget-total">
+                  {formatCurrency(budgetTargetCents, activeCurrency, locale)}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {t("budget.recordedCount", {
+                    count: budgetItems.length,
+                    suffix: budgetItems.length === 1 ? "" : "s",
+                  })}
+                </p>
+              </>
+            )}
+          </Card>
+
+          <Card className="p-6 rounded-2xl">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-primary/10 rounded-xl text-primary">
+                <DollarSign className="h-5 w-5" />
+              </div>
+              <span className="text-muted-foreground font-medium">{t("budget.total")}</span>
+            </div>
+            <p className="text-4xl font-bold text-foreground" data-testid="text-total-spent">
+              {formatCurrency(totalCents, activeCurrency, locale)}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {t("budget.recordedCount", {
+                count: budgetItems.length,
+                suffix: budgetItems.length === 1 ? "" : "s",
+              })}
+            </p>
+          </Card>
+
+          <Card className="p-6 rounded-2xl">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-primary/10 rounded-xl text-primary">
+                <TrendingUp className="h-5 w-5" />
+              </div>
+              <span className="text-muted-foreground font-medium">
+                {remainingCents !== null && remainingCents < 0 ? t("budget.overBudget") : t("budget.remaining")}
+              </span>
+            </div>
+            <p className="text-4xl font-bold text-foreground" data-testid="text-budget-remaining">
+              {budgetTargetCents === null
+                ? "—"
+                : formatCurrency(remainingCents !== null && remainingCents < 0 ? overBudgetCents : remainingCents ?? 0, activeCurrency, locale)}
+            </p>
+            {budgetTargetCents !== null ? (
+              <>
+                <div className="w-full h-3 bg-muted rounded-full overflow-hidden mt-4">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progressPercent}%` }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className={`h-full rounded-full ${remainingCents !== null && remainingCents < 0 ? "bg-destructive" : "bg-primary"}`}
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  {progressPercent}% of your trip budget has been used
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground mt-1">
+                Set a trip budget to see how much room you have left.
+              </p>
+            )}
+          </Card>
         </div>
 
         <AnimatePresence>
@@ -232,19 +468,6 @@ export default function BudgetTracker() {
           )}
         </AnimatePresence>
 
-        <Card className="p-6 rounded-2xl mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-primary/10 rounded-xl text-primary">
-              <DollarSign className="h-5 w-5" />
-            </div>
-            <span className="text-muted-foreground font-medium">{t("budget.total")}</span>
-          </div>
-          <p className="text-4xl font-bold text-foreground" data-testid="text-total-spent">
-            {formatCurrency(totalCents, budgetItems[0]?.currency || "USD", locale)}
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">{budgetItems.length} expense{budgetItems.length !== 1 ? "s" : ""} recorded</p>
-        </Card>
-
         {categoryTotals.length > 0 && (
           <Card className="p-6 rounded-2xl mb-8">
             <div className="flex items-center gap-3 mb-6">
@@ -268,7 +491,7 @@ export default function BudgetTracker() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground">{percentage}%</span>
-                        <span className="font-semibold text-sm">{formatCurrency(cat.total, budgetItems[0]?.currency || "USD", locale)}</span>
+                        <span className="font-semibold text-sm">{formatCurrency(cat.total, activeCurrency, locale)}</span>
                       </div>
                     </div>
                     <div className="w-full h-3 bg-muted rounded-full overflow-hidden">

@@ -14,5 +14,10 @@
 - Billing stays server-authoritative through:
   - `GET /api/subscription/me`
   - `GET /api/subscription/purchase-context`
+  - `POST /api/subscription/sync/apple`
+  - `POST /api/subscription/sync/google`
   - `POST /api/subscription/webhooks/apple`
   - `POST /api/subscription/webhooks/google`
+- Native billing bridge lives in:
+  - `android/app/src/main/java/com/annai/travelplanner/billing/BillingBridgePlugin.java`
+  - `ios/App/App/AppDelegate.swift`

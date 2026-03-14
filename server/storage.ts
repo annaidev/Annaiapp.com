@@ -73,9 +73,11 @@ function mergeDefined<T extends Record<string, any>>(base: T, patch: Partial<T>)
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByAnnaiUserId(annaiUserId: string): Promise<User | undefined>;
+  getUserByAppleAppAccountToken(appleAppAccountToken: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, data: Partial<User>): Promise<User | undefined>;
+  deleteUser(id: number): Promise<void>;
   setUserAnnaiUserId(id: number, annaiUserId: string): Promise<User>;
   updateUserPassword(id: number, hashedPassword: string): Promise<void>;
   getSubscription(userId: number): Promise<Subscription | undefined>;
@@ -106,21 +108,25 @@ export interface IStorage {
   deleteTrip(id: number): Promise<void>;
 
   getPackingListsByTrip(tripId: number): Promise<PackingListsResponse>;
+  getPackingList(id: number): Promise<PackingListResponse | undefined>;
   createPackingList(item: CreatePackingListRequest & { tripId: number }): Promise<PackingListResponse>;
   updatePackingList(id: number, updates: UpdatePackingListRequest): Promise<PackingListResponse>;
   deletePackingList(id: number): Promise<void>;
 
   getBudgetItemsByTrip(tripId: number): Promise<BudgetItemsResponse>;
+  getBudgetItem(id: number): Promise<BudgetItemResponse | undefined>;
   createBudgetItem(item: InsertBudgetItem): Promise<BudgetItemResponse>;
   updateBudgetItem(id: number, updates: Partial<InsertBudgetItem>): Promise<BudgetItemResponse>;
   deleteBudgetItem(id: number): Promise<void>;
 
   getTravelDocumentsByTrip(tripId: number): Promise<TravelDocumentsResponse>;
+  getTravelDocument(id: number): Promise<TravelDocumentResponse | undefined>;
   createTravelDocument(doc: InsertTravelDocument): Promise<TravelDocumentResponse>;
   updateTravelDocument(id: number, updates: Partial<InsertTravelDocument>): Promise<TravelDocumentResponse>;
   deleteTravelDocument(id: number): Promise<void>;
 
   getItineraryItemsByTrip(tripId: number): Promise<ItineraryItemsResponse>;
+  getItineraryItem(id: number): Promise<ItineraryItemResponse | undefined>;
   createItineraryItem(item: InsertItineraryItem): Promise<ItineraryItemResponse>;
   updateItineraryItem(id: number, updates: Partial<InsertItineraryItem>): Promise<ItineraryItemResponse>;
   deleteItineraryItem(id: number): Promise<void>;
@@ -141,6 +147,11 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByAnnaiUserId(annaiUserId: string): Promise<User | undefined> {
     const [user] = await this.orm.select().from(users).where(eq(users.annaiUserId, annaiUserId));
+    return user;
+  }
+
+  async getUserByAppleAppAccountToken(appleAppAccountToken: string): Promise<User | undefined> {
+    const [user] = await this.orm.select().from(users).where(eq(users.appleAppAccountToken, appleAppAccountToken));
     return user;
   }
 
@@ -167,6 +178,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return updated;
+  }
+
+  async deleteUser(id: number): Promise<void> {
+    await this.orm.delete(users).where(eq(users.id, id));
   }
 
   async setUserAnnaiUserId(id: number, annaiUserId: string): Promise<User> {
@@ -425,6 +440,11 @@ export class DatabaseStorage implements IStorage {
     return this.orm.select().from(packingLists).where(eq(packingLists.tripId, tripId));
   }
 
+  async getPackingList(id: number): Promise<PackingListResponse | undefined> {
+    const [item] = await this.orm.select().from(packingLists).where(eq(packingLists.id, id));
+    return item;
+  }
+
   async createPackingList(item: CreatePackingListRequest & { tripId: number }): Promise<PackingListResponse> {
     const [created] = await this.orm.insert(packingLists).values(item).returning();
     return created;
@@ -443,6 +463,11 @@ export class DatabaseStorage implements IStorage {
     return this.orm.select().from(budgetItems).where(eq(budgetItems.tripId, tripId));
   }
 
+  async getBudgetItem(id: number): Promise<BudgetItemResponse | undefined> {
+    const [item] = await this.orm.select().from(budgetItems).where(eq(budgetItems.id, id));
+    return item;
+  }
+
   async createBudgetItem(item: InsertBudgetItem): Promise<BudgetItemResponse> {
     const [created] = await this.orm.insert(budgetItems).values(item).returning();
     return created;
@@ -459,6 +484,11 @@ export class DatabaseStorage implements IStorage {
 
   async getTravelDocumentsByTrip(tripId: number): Promise<TravelDocumentsResponse> {
     return this.orm.select().from(travelDocuments).where(eq(travelDocuments.tripId, tripId));
+  }
+
+  async getTravelDocument(id: number): Promise<TravelDocumentResponse | undefined> {
+    const [doc] = await this.orm.select().from(travelDocuments).where(eq(travelDocuments.id, id));
+    return doc;
   }
 
   async createTravelDocument(doc: InsertTravelDocument): Promise<TravelDocumentResponse> {
@@ -481,6 +511,11 @@ export class DatabaseStorage implements IStorage {
 
   async getItineraryItemsByTrip(tripId: number): Promise<ItineraryItemsResponse> {
     return this.orm.select().from(itineraryItems).where(eq(itineraryItems.tripId, tripId));
+  }
+
+  async getItineraryItem(id: number): Promise<ItineraryItemResponse | undefined> {
+    const [item] = await this.orm.select().from(itineraryItems).where(eq(itineraryItems.id, id));
+    return item;
   }
 
   async createItineraryItem(item: InsertItineraryItem): Promise<ItineraryItemResponse> {
@@ -534,6 +569,10 @@ export class MemStorage implements IStorage {
     return this.usersData.find((u) => u.annaiUserId === annaiUserId);
   }
 
+  async getUserByAppleAppAccountToken(appleAppAccountToken: string): Promise<User | undefined> {
+    return this.usersData.find((u) => u.appleAppAccountToken === appleAppAccountToken);
+  }
+
   async getUserByUsername(username: string): Promise<User | undefined> {
     return this.usersData.find((u) => u.username === username);
   }
@@ -542,6 +581,7 @@ export class MemStorage implements IStorage {
     const created: User = {
       id: this.userId++,
       annaiUserId: user.annaiUserId ?? randomUUID(),
+      appleAppAccountToken: user.appleAppAccountToken ?? null,
       username: user.username,
       password: user.password,
       securityQuestion: user.securityQuestion ?? null,
@@ -566,6 +606,26 @@ export class MemStorage implements IStorage {
     const index = this.usersData.findIndex((entry) => entry.id === id);
     this.usersData[index] = updated;
     return updated;
+  }
+
+  async deleteUser(id: number): Promise<void> {
+    this.usersData = this.usersData.filter((user) => user.id !== id);
+    this.subscriptionsData = this.subscriptionsData.filter((subscription) => subscription.userId !== id);
+    this.giftedEntitlementsData = this.giftedEntitlementsData.filter(
+      (gift) => gift.userId !== id && gift.grantedByUserId !== id,
+    );
+    this.couponCodesData = this.couponCodesData.map((coupon) => ({
+      ...coupon,
+      createdByUserId: coupon.createdByUserId === id ? null : coupon.createdByUserId,
+      redeemedByUserId: coupon.redeemedByUserId === id ? null : coupon.redeemedByUserId,
+    }));
+
+    const tripIds = new Set(this.tripsData.filter((trip) => trip.userId === id).map((trip) => trip.id));
+    this.tripsData = this.tripsData.filter((trip) => trip.userId !== id);
+    this.packingData = this.packingData.filter((item) => !tripIds.has(item.tripId));
+    this.budgetData = this.budgetData.filter((item) => !tripIds.has(item.tripId));
+    this.docsData = this.docsData.filter((item) => !tripIds.has(item.tripId));
+    this.itineraryData = this.itineraryData.filter((item) => !tripIds.has(item.tripId));
   }
 
   async setUserAnnaiUserId(id: number, annaiUserId: string): Promise<User> {
@@ -801,6 +861,7 @@ export class MemStorage implements IStorage {
       origin: trip.origin ?? null,
       destination: trip.destination,
       tripType: trip.tripType ?? "one_way",
+      budgetTargetCents: trip.budgetTargetCents ?? null,
       startDate: trip.startDate ?? null,
       endDate: trip.endDate ?? null,
       notes: trip.notes ?? null,
@@ -834,6 +895,10 @@ export class MemStorage implements IStorage {
     return this.packingData.filter((p) => p.tripId === tripId);
   }
 
+  async getPackingList(id: number): Promise<PackingListResponse | undefined> {
+    return this.packingData.find((p) => p.id === id);
+  }
+
   async createPackingList(item: CreatePackingListRequest & { tripId: number }): Promise<PackingListResponse> {
     const created: PackingListResponse = {
       id: this.packingId++,
@@ -861,6 +926,10 @@ export class MemStorage implements IStorage {
 
   async getBudgetItemsByTrip(tripId: number): Promise<BudgetItemsResponse> {
     return this.budgetData.filter((b) => b.tripId === tripId);
+  }
+
+  async getBudgetItem(id: number): Promise<BudgetItemResponse | undefined> {
+    return this.budgetData.find((b) => b.id === id);
   }
 
   async createBudgetItem(item: InsertBudgetItem): Promise<BudgetItemResponse> {
@@ -894,6 +963,10 @@ export class MemStorage implements IStorage {
     return this.docsData.filter((d) => d.tripId === tripId);
   }
 
+  async getTravelDocument(id: number): Promise<TravelDocumentResponse | undefined> {
+    return this.docsData.find((d) => d.id === id);
+  }
+
   async createTravelDocument(doc: InsertTravelDocument): Promise<TravelDocumentResponse> {
     const created: TravelDocumentResponse = {
       id: this.docId++,
@@ -925,6 +998,10 @@ export class MemStorage implements IStorage {
     return this.itineraryData.filter((i) => i.tripId === tripId);
   }
 
+  async getItineraryItem(id: number): Promise<ItineraryItemResponse | undefined> {
+    return this.itineraryData.find((i) => i.id === id);
+  }
+
   async createItineraryItem(item: InsertItineraryItem): Promise<ItineraryItemResponse> {
     const created: ItineraryItemResponse = {
       id: this.itineraryId++,
@@ -934,6 +1011,7 @@ export class MemStorage implements IStorage {
       title: item.title,
       description: item.description ?? null,
       category: item.category,
+      googlePlaceUrl: item.googlePlaceUrl ?? null,
       sourceFingerprint: item.sourceFingerprint ?? null,
       createdAt: new Date(),
     };

@@ -77,6 +77,31 @@ const profileSchema = z.object({
   citizenship: z.string().nullable(),
 });
 
+const itineraryCategorySchema = z.enum(["activity", "meal", "transport", "sightseeing"]);
+
+const assistantMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().min(1),
+});
+
+const assistantSuggestionSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  category: itineraryCategorySchema,
+  googleSearchUrl: z.string().url().nullable().optional(),
+  googleMapsUrl: z.string().url().nullable().optional(),
+});
+
+const assistantActionSchema = z.object({
+  type: z.literal("add_to_itinerary"),
+  title: z.string(),
+  description: z.string().nullable().optional(),
+  category: itineraryCategorySchema,
+  dayNumber: z.number().int().positive(),
+  timeSlot: z.string().regex(/^\d{2}:\d{2}$/),
+  googlePlaceUrl: z.string().url().nullable().optional(),
+});
+
 const proStatusSchema = z.object({
   plan: z.enum(["free", "pro"]),
   hasProAccess: z.boolean(),
@@ -93,10 +118,24 @@ const proStatusSchema = z.object({
 
 const tripSchema = z.custom<typeof trips.$inferSelect>();
 
+const itineraryItemSchema = z.object({
+  id: z.number().int().positive(),
+  tripId: z.number().int().positive(),
+  dayNumber: z.number().int().positive(),
+  timeSlot: z.string().nullable(),
+  title: z.string(),
+  description: z.string().nullable(),
+  category: z.string(),
+  googlePlaceUrl: z.string().nullable().optional(),
+  sourceFingerprint: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+});
+
 const tripInputSchema = z.object({
   destination: z.string().min(1).max(160),
   origin: z.string().max(160).nullable().optional(),
   tripType: z.enum(tripTypeValues).default("one_way"),
+  budgetTargetCents: z.number().int().nonnegative().nullable().optional(),
   startDate: z.date().nullable().optional(),
   endDate: z.date().nullable().optional(),
   notes: z.string().nullable().optional(),
@@ -176,6 +215,11 @@ const couponRedeemSchema = z.object({
   planTier: z.enum(planTierValues),
 });
 
+const subscriptionSyncResultSchema = z.object({
+  subscription: subscriptionRecordSchema,
+  entitlements: entitlementsSchema,
+});
+
 export const api = {
   pro: {
     status: {
@@ -206,6 +250,13 @@ export const api = {
         citizenship: z.string().max(120).nullable().optional(),
       }),
       responses: { 200: profileSchema, 400: errorSchemas.validation, 401: errorSchemas.unauthorized },
+    },
+  },
+  account: {
+    delete: {
+      method: "DELETE" as const,
+      path: "/api/account" as const,
+      responses: { 204: z.void(), 401: errorSchemas.unauthorized },
     },
   },
   coupons: {
@@ -248,12 +299,45 @@ export const api = {
         401: errorSchemas.unauthorized,
       },
     },
+    syncApple: {
+      method: "POST" as const,
+      path: "/api/subscription/sync/apple" as const,
+      input: z.object({
+        signedTransactionInfo: z.string().min(1),
+      }),
+      responses: {
+        200: subscriptionSyncResultSchema,
+        400: errorSchemas.validation,
+        401: errorSchemas.unauthorized,
+      },
+    },
+    syncGoogle: {
+      method: "POST" as const,
+      path: "/api/subscription/sync/google" as const,
+      input: z.object({
+        purchaseToken: z.string().min(1),
+        productId: z.string().min(1),
+      }),
+      responses: {
+        200: subscriptionSyncResultSchema,
+        400: errorSchemas.validation,
+        401: errorSchemas.unauthorized,
+      },
+    },
   },
   trips: {
     list: { method: 'GET' as const, path: '/api/trips' as const, responses: { 200: z.array(tripSchema) } },
     get: { method: 'GET' as const, path: '/api/trips/:id' as const, responses: { 200: tripSchema, 404: errorSchemas.notFound } },
     create: { method: 'POST' as const, path: '/api/trips' as const, input: tripInputSchema, responses: { 201: tripSchema, 400: errorSchemas.validation } },
     update: { method: 'PUT' as const, path: '/api/trips/:id' as const, input: tripInputSchema.partial(), responses: { 200: tripSchema, 400: errorSchemas.validation, 404: errorSchemas.notFound } },
+    updateBudgetTarget: {
+      method: 'PATCH' as const,
+      path: '/api/trips/:id/budget-target' as const,
+      input: z.object({
+        budgetTargetCents: z.number().int().nonnegative().nullable(),
+      }),
+      responses: { 200: tripSchema, 400: errorSchemas.validation, 404: errorSchemas.notFound },
+    },
     delete: { method: 'DELETE' as const, path: '/api/trips/:id' as const, responses: { 204: z.void(), 404: errorSchemas.notFound } },
   },
   packingLists: {
@@ -275,9 +359,9 @@ export const api = {
     delete: { method: 'DELETE' as const, path: '/api/documents/:id' as const, responses: { 204: z.void() } },
   },
   itineraryItems: {
-    listByTrip: { method: 'GET' as const, path: '/api/trips/:tripId/itinerary' as const, responses: { 200: z.array(z.custom<typeof itineraryItems.$inferSelect>()) } },
-    create: { method: 'POST' as const, path: '/api/trips/:tripId/itinerary' as const, input: insertItineraryItemSchema.omit({ tripId: true }), responses: { 201: z.custom<typeof itineraryItems.$inferSelect>(), 400: errorSchemas.validation } },
-    update: { method: 'PUT' as const, path: '/api/itinerary/:id' as const, input: insertItineraryItemSchema.partial(), responses: { 200: z.custom<typeof itineraryItems.$inferSelect>(), 400: errorSchemas.validation } },
+    listByTrip: { method: 'GET' as const, path: '/api/trips/:tripId/itinerary' as const, responses: { 200: z.array(itineraryItemSchema) } },
+    create: { method: 'POST' as const, path: '/api/trips/:tripId/itinerary' as const, input: insertItineraryItemSchema.omit({ tripId: true }), responses: { 201: itineraryItemSchema, 400: errorSchemas.validation } },
+    update: { method: 'PUT' as const, path: '/api/itinerary/:id' as const, input: insertItineraryItemSchema.partial(), responses: { 200: itineraryItemSchema, 400: errorSchemas.validation } },
     delete: { method: 'DELETE' as const, path: '/api/itinerary/:id' as const, responses: { 204: z.void() } },
   },
   ai: {
@@ -309,7 +393,26 @@ export const api = {
     safetyMap: {
       method: 'POST' as const, path: '/api/ai/safety-map' as const,
       input: z.object({ destination: z.string() }),
-      responses: { 200: z.object({ center: z.object({ lat: z.number(), lng: z.number() }), zones: z.array(z.object({ name: z.string(), lat: z.number(), lng: z.number(), radius: z.number(), level: z.enum(["safe", "caution", "avoid"]), description: z.string() })) }), 403: errorSchemas.upgradeRequired },
+      responses: {
+        200: z.object({
+          center: z.object({ lat: z.number(), lng: z.number() }),
+          summary: z.string().optional(),
+          zones: z.array(
+            z.object({
+              name: z.string(),
+              lat: z.number(),
+              lng: z.number(),
+              radius: z.number(),
+              level: z.enum(["safe", "caution", "avoid"]),
+              description: z.string(),
+              commonIncidents: z.array(z.string()).optional(),
+              travelerNote: z.string().optional(),
+              timingNote: z.string().optional(),
+            }),
+          ),
+        }),
+        403: errorSchemas.upgradeRequired,
+      },
     },
     phrases: {
       method: 'POST' as const, path: '/api/ai/phrases' as const,
@@ -333,8 +436,20 @@ export const api = {
       input: z.object({
         tripId: z.number().int().positive(),
         question: z.string().min(1).max(1200),
+        messages: z.array(assistantMessageSchema).max(12).optional(),
+        activeSuggestions: z.array(assistantSuggestionSchema).max(10).optional(),
       }),
-      responses: { 200: z.object({ answer: z.string() }), 403: errorSchemas.upgradeRequired, 404: errorSchemas.notFound },
+      responses: {
+        200: z.object({
+          answer: z.string(),
+          suggestions: z.array(assistantSuggestionSchema).default([]),
+          shouldOfferItineraryAdd: z.boolean().default(false),
+          createdItineraryItem: itineraryItemSchema.nullable().optional(),
+          pendingAction: assistantActionSchema.nullable().optional(),
+        }),
+        403: errorSchemas.upgradeRequired,
+        404: errorSchemas.notFound,
+      },
     },
   },
   bookingImport: {

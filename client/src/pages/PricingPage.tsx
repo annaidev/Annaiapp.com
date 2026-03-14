@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+﻿import { useQueryClient } from "@tanstack/react-query";
 import { Check, Crown, MapPinned, Shield, Sparkles } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { Card } from "@/components/ui/card";
@@ -19,6 +19,7 @@ export default function PricingPage() {
   const queryClient = useQueryClient();
   const { data } = useSubscriptionState(true);
   const { t } = useI18n();
+  const nativeBilling = isNativeBillingRuntime();
 
   const freeFeatures = [
     t("pricing.freeFeature1"),
@@ -156,6 +157,18 @@ export default function PricingPage() {
                   {data?.subscription?.expiresAt ? `, renews/expires ${new Date(data.subscription.expiresAt).toLocaleDateString()}` : ""}
                 </p>
               </div>
+
+              <div className="rounded-2xl bg-muted/40 p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Crown className="h-4 w-4 text-primary" />
+                  Subscription checkout
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {nativeBilling
+                    ? "This installed mobile build can start and restore store subscriptions."
+                    : "Store subscriptions are completed inside the installed iOS or Android app. The web app shows plan status and support links only."}
+                </p>
+              </div>
             </div>
 
             <div className="mt-8 flex flex-col gap-3">
@@ -165,6 +178,20 @@ export default function PricingPage() {
               <Button variant="outline" className="h-12 rounded-2xl" onClick={handleRestore} data-testid="button-restore-subscription">
                 {t("pricing.restore")}
               </Button>
+            </div>
+
+            <div className="mt-6 text-center text-sm text-muted-foreground">
+              <a href="/support/index.html" className="font-medium text-primary underline underline-offset-4">
+                Support
+              </a>
+              {" | "}
+              <a href="/privacy-policy/index.html" className="font-medium text-primary underline underline-offset-4">
+                Privacy Policy
+              </a>
+              {" | "}
+              <a href="/account-deletion/index.html" className="font-medium text-primary underline underline-offset-4">
+                Account Deletion
+              </a>
             </div>
           </Card>
         </div>

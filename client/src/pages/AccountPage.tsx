@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { Crown, Globe2, Gift, ShieldCheck, User } from "lucide-react";
+import { Crown, Globe2, Gift, ShieldAlert, ShieldCheck, User } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
 import { Card } from "@/components/ui/card";
@@ -8,13 +8,25 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useUser } from "@/hooks/use-auth";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useDeleteAccount, useUser } from "@/hooks/use-auth";
 import { useSubscriptionState } from "@/hooks/use-entitlements";
 import { useProfile, useUpdateProfile } from "@/hooks/use-profile";
 import { useI18n } from "@/lib/i18n";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { api } from "@shared/routes";
+
+function formatFeatureKey(featureKey: string) {
+  return featureKey
+    .split("_")
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (lower === "ai") return "AI";
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+}
 
 export default function AccountPage() {
   const { data: user } = useUser();
@@ -27,7 +39,11 @@ export default function AccountPage() {
   const [homeCurrency, setHomeCurrency] = useState("USD");
   const [citizenship, setCitizenship] = useState("");
   const [couponCode, setCouponCode] = useState("");
+  const [deletePhrase, setDeletePhrase] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const queryClient = useQueryClient();
+  const deleteAccountMutation = useDeleteAccount();
+  const formattedEnabledFeatures = (entitlements?.enabledFeatures ?? []).map((feature) => formatFeatureKey(feature));
 
   useEffect(() => {
     if (profile?.homeCurrency) {
@@ -81,6 +97,8 @@ export default function AccountPage() {
     },
   });
 
+  const canDeleteAccount = deletePhrase.trim() === "DELETE";
+
   return (
     <div className="min-h-screen bg-background">
       <NavBar />
@@ -122,14 +140,14 @@ export default function AccountPage() {
                 <p className="mt-1 text-lg font-semibold text-foreground">{data?.subscription?.status ?? "inactive"}</p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {data?.subscription?.productId ?? "No product linked yet"}
-                  {data?.subscription?.expiresAt ? ` • ${new Date(data.subscription.expiresAt).toLocaleDateString()}` : ""}
+                  {data?.subscription?.expiresAt ? ` â€¢ ${new Date(data.subscription.expiresAt).toLocaleDateString()}` : ""}
                 </p>
               </div>
 
               <div className="rounded-2xl bg-muted/40 p-4 md:col-span-2">
                 <p className="text-sm text-muted-foreground">{t("account.features")}</p>
                 <p className="mt-2 text-sm text-foreground">
-                  {(entitlements?.enabledFeatures ?? []).join(", ") || "No feature state loaded"}
+                  {formattedEnabledFeatures.join(", ") || "No feature state loaded"}
                 </p>
               </div>
             </div>
@@ -237,9 +255,103 @@ export default function AccountPage() {
                 </Button>
               </div>
             </Card>
+
+            <Card className="rounded-[2rem] border border-destructive/30 p-8 shadow-sm">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="rounded-2xl bg-destructive/10 p-3 text-destructive">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">Delete Account</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Permanently delete your Annai account and associated trip data.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  This permanently removes your account, trips, itinerary items, packing lists, budget items, saved documents, and active session access.
+                </p>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">
+                    Type <span className="font-semibold text-foreground">DELETE</span> to confirm
+                  </label>
+                  <Input
+                    value={deletePhrase}
+                    onChange={(event) => setDeletePhrase(event.target.value)}
+                    className="rounded-2xl"
+                    placeholder="DELETE"
+                    data-testid="input-delete-account-confirmation"
+                  />
+                </div>
+                <Button
+                  variant="destructive"
+                  className="w-full rounded-2xl"
+                  disabled={!canDeleteAccount}
+                  onClick={() => setDeleteDialogOpen(true)}
+                  data-testid="button-open-delete-account"
+                >
+                  Delete Account
+                </Button>
+              </div>
+            </Card>
           </div>
         </div>
+
+        <div className="mt-8 text-center text-sm text-muted-foreground">
+          <a href="/terms-of-service/index.html" className="font-medium text-primary underline underline-offset-4">
+            Terms of Service
+          </a>
+          {" | "}
+          <a href="/privacy-policy/index.html" className="font-medium text-primary underline underline-offset-4">
+            Privacy Policy
+          </a>
+          {" | "}
+          <a href="/support/index.html" className="font-medium text-primary underline underline-offset-4">
+            Support
+          </a>
+          {" | "}
+          <a href="/account-deletion/index.html" className="font-medium text-primary underline underline-offset-4">
+            Account Deletion
+          </a>
+        </div>
       </main>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action is permanent. Your Annai account and associated trip data will be deleted and cannot be recovered.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteAccountMutation.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                deleteAccountMutation.mutate(undefined, {
+                  onSuccess: () => {
+                    setDeleteDialogOpen(false);
+                  },
+                  onError: (error) => {
+                    toast({
+                      title: "Unable to delete account",
+                      description: error instanceof Error ? error.message.split(":").slice(1).join(":").trim() || error.message : "Account deletion failed.",
+                      variant: "destructive",
+                    });
+                  },
+                });
+              }}
+            >
+              {deleteAccountMutation.isPending ? "Deleting..." : "Delete Permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

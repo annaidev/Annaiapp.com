@@ -1,7 +1,14 @@
 import { createHash } from "crypto";
 import { storage } from "./storage";
 
-export type AiCacheFeature = "packing-list" | "trip-plan" | "cultural-tips" | "phrases" | "customs-entry";
+export type AiCacheFeature =
+  | "packing-list"
+  | "trip-plan"
+  | "cultural-tips"
+  | "safety-advice"
+  | "phrases"
+  | "weather"
+  | "customs-entry";
 
 export type AiCacheConfig = {
   feature: AiCacheFeature;
@@ -18,9 +25,11 @@ type CachePayload = Record<string, unknown>;
 const cacheConfigs: Record<AiCacheFeature, AiCacheConfig> = {
   "packing-list": { feature: "packing-list", ttlHours: 24 * 30, promptVersion: "v1" },
   "trip-plan": { feature: "trip-plan", ttlHours: 24 * 30, promptVersion: "v1" },
-  "cultural-tips": { feature: "cultural-tips", ttlHours: 24 * 45, promptVersion: "v1" },
-  phrases: { feature: "phrases", ttlHours: 24 * 45, promptVersion: "v1" },
-  "customs-entry": { feature: "customs-entry", ttlHours: 24 * 14, promptVersion: "v1" },
+  "cultural-tips": { feature: "cultural-tips", ttlHours: 24 * 14, promptVersion: "v1" },
+  "safety-advice": { feature: "safety-advice", ttlHours: 24 * 3, promptVersion: "v1" },
+  phrases: { feature: "phrases", ttlHours: 24 * 14, promptVersion: "v1" },
+  weather: { feature: "weather", ttlHours: 24, promptVersion: "v1" },
+  "customs-entry": { feature: "customs-entry", ttlHours: 24 * 3, promptVersion: "v1" },
 };
 
 export function normalizeDestination(destination: string): string {
@@ -63,6 +72,28 @@ export function buildTripPlanCacheInput(input: {
 export function buildDestinationOnlyCacheInput(input: BaseCacheInput): CachePayload {
   return {
     destination: normalizeDestination(input.destination),
+  };
+}
+
+export function buildSafetyAdviceCacheInput(input: {
+  destination: string;
+  citizenship?: string;
+}): CachePayload {
+  return {
+    destination: normalizeDestination(input.destination),
+    citizenship: input.citizenship?.trim().toLowerCase() || "traveler",
+  };
+}
+
+export function buildWeatherCacheInput(input: {
+  destination: string;
+  startDate?: string;
+  endDate?: string;
+}): CachePayload {
+  return {
+    destination: normalizeDestination(input.destination),
+    startDate: input.startDate?.trim() || "unspecified",
+    endDate: input.endDate?.trim() || "unspecified",
   };
 }
 

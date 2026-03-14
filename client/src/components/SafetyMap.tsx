@@ -13,10 +13,14 @@ interface SafetyZone {
   radius: number;
   level: "safe" | "caution" | "avoid";
   description: string;
+  commonIncidents?: string[];
+  travelerNote?: string;
+  timingNote?: string;
 }
 
 interface SafetyMapData {
   center: { lat: number; lng: number };
+  summary?: string;
   zones: SafetyZone[];
 }
 
@@ -88,7 +92,8 @@ export function SafetyMap({ destination }: { destination: string }) {
           `<div style="min-width:180px">
             <strong style="font-size:14px">${zone.name}</strong>
             <div style="margin:6px 0;padding:3px 8px;border-radius:4px;display:inline-block;font-size:11px;font-weight:600;background:${colors.fill}22;color:${colors.stroke}">${colors.label}</div>
-            <p style="margin:0;font-size:13px;color:#555">${zone.description}</p>
+            <p style="margin:0 0 6px 0;font-size:13px;color:#555">${zone.description}</p>
+            ${zone.timingNote ? `<p style="margin:0;font-size:12px;color:#666"><strong>Timing:</strong> ${zone.timingNote}</p>` : ""}
           </div>`
         );
 
@@ -142,8 +147,17 @@ export function SafetyMap({ destination }: { destination: string }) {
     );
   }
 
+  const resolvedMapData = mapData!;
+  const visibleZones = filter === "all" ? resolvedMapData.zones : resolvedMapData.zones.filter((zone) => zone.level === filter);
+
   return (
     <div className="space-y-4" data-testid="safety-map-container">
+      {resolvedMapData.summary ? (
+        <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">
+          {resolvedMapData.summary}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-2">
         {(["all", "safe", "caution", "avoid"] as const).map((f) => (
           <button
@@ -172,6 +186,39 @@ export function SafetyMap({ destination }: { destination: string }) {
         </Button>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="zone-summary-cards">
+        {visibleZones.map((zone) => (
+          <button
+            key={`${zone.name}-${zone.level}`}
+            type="button"
+            onClick={() => {
+              setSelectedZone(zone);
+              mapRef.current?.setView([zone.lat, zone.lng], 14, { animate: true });
+            }}
+            className={`rounded-2xl border p-4 text-left transition hover:border-primary/40 hover:shadow-sm ${selectedZone?.name === zone.name ? "border-primary/50 bg-primary/5" : "border-border/60 bg-card"}`}
+            data-testid={`zone-card-${zone.name}`}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`mt-0.5 ${ZONE_COLORS[zone.level].text}`}>
+                {ZONE_ICONS[zone.level]}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="font-semibold text-foreground">{zone.name}</h4>
+                  <span className={`text-xs font-semibold uppercase ${ZONE_COLORS[zone.level].text}`}>
+                    {ZONE_COLORS[zone.level].label}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{zone.description}</p>
+                {zone.timingNote ? (
+                  <p className="mt-2 text-xs font-medium text-muted-foreground">Timing: {zone.timingNote}</p>
+                ) : null}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+
       <div className="rounded-2xl overflow-hidden border border-border shadow-lg">
         <div ref={mapContainerRef} style={{ height: "450px", width: "100%" }} />
       </div>
@@ -188,6 +235,24 @@ export function SafetyMap({ destination }: { destination: string }) {
                 {ZONE_COLORS[selectedZone.level].label}
               </span>
               <p className="text-sm text-muted-foreground mt-1">{selectedZone.description}</p>
+              {selectedZone.timingNote ? (
+                <p className="text-xs font-medium text-muted-foreground mt-2">Timing: {selectedZone.timingNote}</p>
+              ) : null}
+              {selectedZone.travelerNote ? (
+                <p className="text-sm text-foreground mt-2">{selectedZone.travelerNote}</p>
+              ) : null}
+              {selectedZone.commonIncidents?.length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedZone.commonIncidents.map((incident) => (
+                    <span
+                      key={incident}
+                      className="inline-flex items-center rounded-full bg-background/70 px-2.5 py-1 text-xs text-muted-foreground ring-1 ring-border"
+                    >
+                      {incident}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <button onClick={() => setSelectedZone(null)} className="ml-auto text-muted-foreground hover:text-foreground">
               <XCircle className="h-4 w-4" />
@@ -199,7 +264,7 @@ export function SafetyMap({ destination }: { destination: string }) {
       {mapData && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="zone-legend">
           {(["safe", "caution", "avoid"] as const).map((level) => {
-            const count = mapData.zones.filter(z => z.level === level).length;
+            const count = resolvedMapData.zones.filter(z => z.level === level).length;
             return (
               <div key={level} className={`rounded-xl p-3 ${ZONE_COLORS[level].bg} flex items-center gap-3`}>
                 <div className={ZONE_COLORS[level].text}>{ZONE_ICONS[level]}</div>

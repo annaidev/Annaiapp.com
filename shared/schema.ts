@@ -44,6 +44,7 @@ export type AdminGrantStatus = (typeof adminGrantStatusValues)[number];
 export const users = pgTable("annai_travel_users", {
   id: serial("id").primaryKey(),
   annaiUserId: text("annai_user_id").unique(),
+  appleAppAccountToken: text("apple_app_account_token").unique(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   securityQuestion: text("security_question"),
@@ -64,6 +65,7 @@ export const trips = pgTable("annai_travel_trips", {
   origin: text("origin"),
   destination: text("destination").notNull(),
   tripType: text("trip_type").notNull().default("one_way"),
+  budgetTargetCents: integer("budget_target_cents"),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   notes: text("notes"),
@@ -107,6 +109,7 @@ export const itineraryItems = pgTable("annai_travel_itinerary_items", {
   title: text("title").notNull(),
   description: text("description"),
   category: text("category").notNull(),
+  googlePlaceUrl: text("google_place_url"),
   sourceFingerprint: text("source_fingerprint"),
   createdAt: timestamp("created_at").defaultNow(),
 });

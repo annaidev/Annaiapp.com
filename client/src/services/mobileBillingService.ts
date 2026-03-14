@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { apiRequest } from "@/lib/queryClient";
 
 export const ANNAI_PRO_MONTHLY_PRODUCT_ID = "annai.pro.monthly.9_99";
 
@@ -26,11 +27,17 @@ type NativeBillingPurchaseResult = {
   state: "completed" | "pending" | "failed";
   message?: string;
   transactionId?: string;
+  signedTransactionInfo?: string;
+  purchaseToken?: string;
+  productId?: string;
 };
 
 type NativeBillingRestoreResult = {
   restored: boolean;
   message?: string;
+  signedTransactionInfo?: string;
+  purchaseToken?: string;
+  productId?: string;
 };
 
 interface BillingBridgePlugin {
@@ -72,7 +79,11 @@ export async function startNativeSubscriptionPurchase(purchaseContext: PurchaseC
             productId: purchaseContext.google.productId || purchaseContext.productId || ANNAI_PRO_MONTHLY_PRODUCT_ID,
             obfuscatedExternalAccountId: purchaseContext.google.obfuscatedExternalAccountId,
             obfuscatedExternalProfileId: purchaseContext.google.obfuscatedExternalProfileId,
-          });
+        });
+
+    if (result.state === "completed") {
+      await syncSubscriptionWithServer(runtime, result);
+    }
 
     return {
       runtime,
@@ -101,6 +112,9 @@ export async function restoreNativePurchases() {
 
   try {
     const result = await BillingBridge.restorePurchases();
+    if (result.restored) {
+      await syncSubscriptionWithServer(runtime, result);
+    }
     return {
       runtime,
       restored: result.restored,
@@ -113,4 +127,28 @@ export async function restoreNativePurchases() {
       message: error instanceof Error ? error.message : "Native restore bridge is unavailable.",
     };
   }
+}
+
+async function syncSubscriptionWithServer(
+  runtime: Exclude<BillingRuntime, "web">,
+  result: Pick<NativeBillingPurchaseResult & NativeBillingRestoreResult, "signedTransactionInfo" | "purchaseToken" | "productId">,
+) {
+  if (runtime === "ios") {
+    if (!result.signedTransactionInfo) {
+      throw new Error("Apple purchase completed but no signed transaction info was returned.");
+    }
+    await apiRequest("POST", "/api/subscription/sync/apple", {
+      signedTransactionInfo: result.signedTransactionInfo,
+    });
+    return;
+  }
+
+  if (!result.purchaseToken || !result.productId) {
+    throw new Error("Google Play purchase completed but no purchase token was returned.");
+  }
+
+  await apiRequest("POST", "/api/subscription/sync/google", {
+    purchaseToken: result.purchaseToken,
+    productId: result.productId,
+  });
 }

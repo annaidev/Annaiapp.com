@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, buildUrl } from "@shared/routes";
 import type { ItineraryItem } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
 
 const CATEGORIES = [
   { value: "activity", label: "Activity", icon: MapPin, color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },
@@ -54,13 +55,7 @@ export default function ItineraryBuilder() {
   const createMutation = useMutation({
     mutationFn: async (data: { dayNumber: number; timeSlot: string; title: string; description: string; category: string }) => {
       const url = buildUrl(api.itineraryItems.create.path, { tripId });
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to create item");
+      const res = await apiRequest(api.itineraryItems.create.method, url, data);
       return res.json();
     },
     onSuccess: () => {
@@ -72,8 +67,7 @@ export default function ItineraryBuilder() {
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       const url = buildUrl(api.itineraryItems.delete.path, { id });
-      const res = await fetch(url, { method: "DELETE", credentials: "include" });
-      if (!res.ok) throw new Error("Failed to delete item");
+      await apiRequest(api.itineraryItems.delete.method, url);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.itineraryItems.listByTrip.path, tripId] });
@@ -89,21 +83,15 @@ export default function ItineraryBuilder() {
       title: string;
       description: string;
       category: string;
-    }) => {
+      }) => {
       const url = buildUrl(api.itineraryItems.update.path, { id: data.id });
-      const res = await fetch(url, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await apiRequest(api.itineraryItems.update.method, url, {
           dayNumber: data.dayNumber,
           timeSlot: data.timeSlot,
           title: data.title,
           description: data.description,
           category: data.category,
-        }),
-        credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to update item");
       return res.json();
     },
     onSuccess: () => {
@@ -474,7 +462,18 @@ export default function ItineraryBuilder() {
                                     </span>
                                   </div>
                                   <h3 className="font-semibold text-foreground" data-testid={`text-item-title-${item.id}`}>
-                                    {item.title}
+                                    {item.googlePlaceUrl ? (
+                                      <a
+                                        href={item.googlePlaceUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="underline decoration-primary/30 underline-offset-4 transition-colors hover:text-primary"
+                                      >
+                                        {item.title}
+                                      </a>
+                                    ) : (
+                                      item.title
+                                    )}
                                   </h3>
                                   {item.description && (
                                     <p className="text-sm text-muted-foreground mt-1">{item.description}</p>

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -5,45 +6,70 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUser } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
-import AccountPage from "@/pages/AccountPage";
 import Home from "@/pages/Home";
 import AuthPage from "@/pages/AuthPage";
-import TravelAuthPage from "@/pages/TravelAuth";
-import TripDashboard from "@/pages/TripDashboard";
-import PackingList from "@/pages/PackingList";
-import BudgetTracker from "@/pages/BudgetTracker";
-import DocumentVault from "@/pages/DocumentVault";
-import ItineraryBuilder from "@/pages/ItineraryBuilder";
-import PricingPage from "@/pages/PricingPage";
 import { useLocation } from "wouter";
 import { I18nProvider } from "@/lib/i18n";
+
+const AccountPage = lazy(() => import("@/pages/AccountPage"));
+const TravelAuthPage = lazy(() => import("@/pages/TravelAuth"));
+const TripDashboard = lazy(() => import("@/pages/TripDashboard"));
+const PackingList = lazy(() => import("@/pages/PackingList"));
+const BudgetTracker = lazy(() => import("@/pages/BudgetTracker"));
+const DocumentVault = lazy(() => import("@/pages/DocumentVault"));
+const ItineraryBuilder = lazy(() => import("@/pages/ItineraryBuilder"));
+const PricingPage = lazy(() => import("@/pages/PricingPage"));
+
+function PageLoader() {
+  return (
+    <div className="min-h-screen bg-background px-6 py-12">
+      <div className="mx-auto max-w-5xl space-y-4">
+        <div className="h-8 w-48 animate-pulse rounded-full bg-muted/60" />
+        <div className="h-28 animate-pulse rounded-[2rem] bg-muted/50" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="h-40 animate-pulse rounded-[2rem] bg-muted/40" />
+          <div className="h-40 animate-pulse rounded-[2rem] bg-muted/40" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Router() {
   const [location] = useLocation();
   const { data: user, isLoading } = useUser();
 
   if (location === "/auth/camping") {
-    return <TravelAuthPage />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <TravelAuthPage />
+      </Suspense>
+    );
   }
 
-  // Avoid blocking the whole app on slow backend wake-ups.
-  if (!user || isLoading) {
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  if (!user) {
     return <AuthPage />;
   }
 
   return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/account" component={AccountPage} />
-      <Route path="/pricing" component={PricingPage} />
-      <Route path="/travel" component={Home} />
-      <Route path="/trips/:id" component={TripDashboard} />
-      <Route path="/trips/:id/packing-list" component={PackingList} />
-      <Route path="/trips/:id/budget" component={BudgetTracker} />
-      <Route path="/trips/:id/documents" component={DocumentVault} />
-      <Route path="/trips/:id/itinerary" component={ItineraryBuilder} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/account" component={AccountPage} />
+        <Route path="/pricing" component={PricingPage} />
+        <Route path="/travel" component={Home} />
+        <Route path="/trips/:id" component={TripDashboard} />
+        <Route path="/trips/:id/packing-list" component={PackingList} />
+        <Route path="/trips/:id/budget" component={BudgetTracker} />
+        <Route path="/trips/:id/documents" component={DocumentVault} />
+        <Route path="/trips/:id/itinerary" component={ItineraryBuilder} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 

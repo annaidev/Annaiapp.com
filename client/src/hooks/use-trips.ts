@@ -36,6 +36,7 @@ export function useCreateTrip() {
         origin: draftTrip.origin ?? null,
         destination: draftTrip.destination,
         tripType: draftTrip.tripType ?? "one_way",
+        budgetTargetCents: draftTrip.budgetTargetCents ?? null,
         startDate: draftTrip.startDate ?? null,
         endDate: draftTrip.endDate ?? null,
         notes: draftTrip.notes ?? null,
@@ -87,13 +88,7 @@ export function useUpdateTrip() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: number } & UpdateTripRequest) => {
       const url = buildUrl(api.trips.update.path, { id });
-      const res = await fetch(url, {
-        method: api.trips.update.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to update trip");
+      const res = await apiRequest(api.trips.update.method, url, updates);
       return api.trips.update.responses[200].parse(await res.json());
     },
     onSuccess: (_, variables) => {
