@@ -7,20 +7,30 @@ function resetUserScopedClientState(user: Pick<User, "id" | "username">) {
   queryClient.setQueryData(["/api/user"], user);
 }
 
-async function recoverUserAfterTimeout(): Promise<Pick<User, "id" | "username"> | null> {
-  try {
-    const response = await fetch("/api/user", {
-      credentials: "include",
-    });
+async function recoverUserAfterTimeout(
+  maxWaitMs = 90000,
+  intervalMs = 2000,
+): Promise<Pick<User, "id" | "username"> | null> {
+  const start = Date.now();
 
-    if (!response.ok) {
-      return null;
+  while (Date.now() - start <= maxWaitMs) {
+    try {
+      const response = await fetch("/api/user", {
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (response.ok) {
+        return (await response.json()) as Pick<User, "id" | "username">;
+      }
+    } catch {
+      // Keep polling for delayed session commit/cookie propagation.
     }
 
-    return (await response.json()) as Pick<User, "id" | "username">;
-  } catch {
-    return null;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
+
+  return null;
 }
 
 export function useUser() {
@@ -39,7 +49,10 @@ export function useLogin() {
         const res = await apiRequest("POST", "/api/login", data);
         return res.json();
       } catch (error) {
-        if (error instanceof Error && error.message.includes("Request timed out")) {
+        if (
+          error instanceof Error &&
+          (error.message.includes("Request timed out") || error.message.toLowerCase().includes("failed to fetch"))
+        ) {
           const recoveredUser = await recoverUserAfterTimeout();
           if (recoveredUser) {
             return recoveredUser;
@@ -62,7 +75,10 @@ export function useRegister() {
         const res = await apiRequest("POST", "/api/register", data);
         return res.json();
       } catch (error) {
-        if (error instanceof Error && error.message.includes("Request timed out")) {
+        if (
+          error instanceof Error &&
+          (error.message.includes("Request timed out") || error.message.toLowerCase().includes("failed to fetch"))
+        ) {
           const recoveredUser = await recoverUserAfterTimeout();
           if (recoveredUser) {
             return recoveredUser;
