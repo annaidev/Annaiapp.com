@@ -96,6 +96,13 @@ const passwordResetRateLimit = createRateLimit({
   keyGenerator: getRateLimitKey,
 });
 
+const changePasswordRateLimit = createRateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: "Too many password change attempts. Please try again later.",
+  keyGenerator: (req) => `${req.path}:${req.ip}:${req.user?.id ?? "anon"}`,
+});
+
 const annaiExchangeRateLimit = createRateLimit({
   windowMs: 10 * 60 * 1000,
   max: 20,
@@ -456,6 +463,41 @@ export function setupAuth(app: Express) {
         return res.json({ message: "Logged out" });
       });
     });
+  });
+
+  app.post("/api/account/change-password", requireAuth, changePasswordRateLimit, async (req: Request, res: Response) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current password and new password are required" });
+      }
+
+      if ((newPassword as string).length < 10) {
+        return res.status(400).json({ message: "Password must be at least 10 characters" });
+      }
+
+      const user = await storage.getUser(req.user!.id);
+      if (!user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const isValidCurrentPassword = await comparePasswords(currentPassword as string, user.password);
+      if (!isValidCurrentPassword) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
+
+      const isSamePassword = await comparePasswords(newPassword as string, user.password);
+      if (isSamePassword) {
+        return res.status(400).json({ message: "New password must be different from your current password" });
+      }
+
+      const hashedPassword = await hashPassword(newPassword as string);
+      await storage.updateUserPassword(user.id, hashedPassword);
+      return res.status(200).json({ message: "Password updated successfully" });
+    } catch {
+      return res.status(500).json({ message: "Unable to update password" });
+    }
   });
 
   app.delete("/api/account", requireAuth, (req: Request, res: Response) => {

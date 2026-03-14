@@ -1,6 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-const FETCH_TIMEOUT_MS = 15000;
+const FETCH_TIMEOUT_MS = 65000;
 let csrfTokenPromise: Promise<string> | null = null;
 
 export function apiUrl(path: string): string {
@@ -26,12 +26,17 @@ function isRetriableNetworkError(err: unknown): boolean {
   );
 }
 
-async function fetchWithRetry(input: string, init: RequestInit, attempts = 3): Promise<Response> {
+async function fetchWithRetry(
+  input: string,
+  init: RequestInit,
+  attempts = 3,
+  timeoutMs = FETCH_TIMEOUT_MS,
+): Promise<Response> {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       return await fetch(apiUrl(input), { ...init, signal: controller.signal });
@@ -81,9 +86,10 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const normalizedMethod = method.toUpperCase();
+  const isSafeMethod = ["GET", "HEAD", "OPTIONS"].includes(normalizedMethod);
   const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
 
-  if (!["GET", "HEAD", "OPTIONS"].includes(normalizedMethod)) {
+  if (!isSafeMethod) {
     headers["X-CSRF-Token"] = await getCsrfToken();
   }
 
@@ -92,10 +98,10 @@ export async function apiRequest(
     headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
-  });
+  }, isSafeMethod ? 3 : 1);
 
   if (
-    !["GET", "HEAD", "OPTIONS"].includes(normalizedMethod) &&
+    !isSafeMethod &&
     res.status === 403
   ) {
     const text = await res.text();

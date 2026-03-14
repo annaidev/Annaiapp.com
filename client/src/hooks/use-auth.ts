@@ -7,6 +7,22 @@ function resetUserScopedClientState(user: Pick<User, "id" | "username">) {
   queryClient.setQueryData(["/api/user"], user);
 }
 
+async function recoverUserAfterTimeout(): Promise<Pick<User, "id" | "username"> | null> {
+  try {
+    const response = await fetch("/api/user", {
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as Pick<User, "id" | "username">;
+  } catch {
+    return null;
+  }
+}
+
 export function useUser() {
   return useQuery<Pick<User, "id" | "username"> | null>({
     queryKey: ["/api/user"],
@@ -19,8 +35,18 @@ export function useUser() {
 export function useLogin() {
   return useMutation({
     mutationFn: async (data: { username: string; password: string }) => {
-      const res = await apiRequest("POST", "/api/login", data);
-      return res.json();
+      try {
+        const res = await apiRequest("POST", "/api/login", data);
+        return res.json();
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("Request timed out")) {
+          const recoveredUser = await recoverUserAfterTimeout();
+          if (recoveredUser) {
+            return recoveredUser;
+          }
+        }
+        throw error;
+      }
     },
     onSuccess: (user: Pick<User, "id" | "username">) => {
       invalidateCsrfToken();
@@ -32,8 +58,18 @@ export function useLogin() {
 export function useRegister() {
   return useMutation({
     mutationFn: async (data: { username: string; password: string; securityQuestion: string; securityAnswer: string }) => {
-      const res = await apiRequest("POST", "/api/register", data);
-      return res.json();
+      try {
+        const res = await apiRequest("POST", "/api/register", data);
+        return res.json();
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("Request timed out")) {
+          const recoveredUser = await recoverUserAfterTimeout();
+          if (recoveredUser) {
+            return recoveredUser;
+          }
+        }
+        throw error;
+      }
     },
     onSuccess: (user: Pick<User, "id" | "username">) => {
       invalidateCsrfToken();

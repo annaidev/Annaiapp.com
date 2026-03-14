@@ -253,6 +253,19 @@ export const api = {
     },
   },
   account: {
+    changePassword: {
+      method: "POST" as const,
+      path: "/api/account/change-password" as const,
+      input: z.object({
+        currentPassword: z.string().min(1),
+        newPassword: z.string().min(10),
+      }),
+      responses: {
+        200: z.object({ message: z.string() }),
+        400: errorSchemas.validation,
+        401: errorSchemas.unauthorized,
+      },
+    },
     delete: {
       method: "DELETE" as const,
       path: "/api/account" as const,

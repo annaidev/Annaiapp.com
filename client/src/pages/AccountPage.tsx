@@ -39,6 +39,9 @@ export default function AccountPage() {
   const [homeCurrency, setHomeCurrency] = useState("USD");
   const [citizenship, setCitizenship] = useState("");
   const [couponCode, setCouponCode] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [deletePhrase, setDeletePhrase] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -97,7 +100,37 @@ export default function AccountPage() {
     },
   });
 
+  const changePasswordMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest(api.account.changePassword.method, api.account.changePassword.path, {
+        currentPassword,
+        newPassword,
+      });
+      return api.account.changePassword.responses[200].parse(await res.json());
+    },
+    onSuccess: () => {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      toast({
+        title: "Password updated",
+        description: "Your account password has been changed.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Unable to change password",
+        description: error instanceof Error ? error.message.split(":").slice(1).join(":").trim() || error.message : "Password update failed.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const canDeleteAccount = deletePhrase.trim() === "DELETE";
+  const isPasswordFormValid =
+    Boolean(currentPassword.trim()) &&
+    newPassword.length >= 10 &&
+    confirmNewPassword === newPassword;
 
   return (
     <div className="min-h-screen bg-background">
@@ -252,6 +285,69 @@ export default function AccountPage() {
                   data-testid="button-redeem-coupon"
                 >
                   {redeemCouponMutation.isPending ? "Redeeming..." : "Redeem Code"}
+                </Button>
+              </div>
+            </Card>
+
+            <Card className="rounded-[2rem] border p-8 shadow-sm">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">Change Password</h2>
+                  <p className="text-sm text-muted-foreground">Update your password to keep your account secure.</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Current password</label>
+                  <Input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    className="rounded-2xl"
+                    placeholder="Enter current password"
+                    data-testid="input-current-password"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">New password</label>
+                  <Input
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    className="rounded-2xl"
+                    placeholder="At least 10 characters"
+                    data-testid="input-new-password-account"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Confirm new password</label>
+                  <Input
+                    type="password"
+                    value={confirmNewPassword}
+                    onChange={(event) => setConfirmNewPassword(event.target.value)}
+                    className="rounded-2xl"
+                    placeholder="Re-enter new password"
+                    data-testid="input-confirm-password-account"
+                  />
+                </div>
+
+                {confirmNewPassword.length > 0 && confirmNewPassword !== newPassword && (
+                  <p className="text-sm text-destructive">New password and confirmation do not match.</p>
+                )}
+
+                <Button
+                  className="w-full rounded-2xl"
+                  disabled={changePasswordMutation.isPending || !isPasswordFormValid}
+                  onClick={() => changePasswordMutation.mutate()}
+                  data-testid="button-change-password"
+                >
+                  {changePasswordMutation.isPending ? "Updating..." : "Change Password"}
                 </Button>
               </div>
             </Card>
