@@ -6,6 +6,7 @@ import createMemoryStore from "memorystore";
 import { createHmac, scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
+import { pool } from "./db";
 import type { User as AppUser } from "@shared/schema";
 import connectPg from "connect-pg-simple";
 import { createRateLimit } from "./rateLimit";
@@ -209,9 +210,9 @@ export function setupAuth(app: Express) {
   const PgStore = connectPg(session);
   const sessionSecret = getSessionSecret();
   const sessionStore =
-    process.env.DATABASE_URL
+    pool
       ? new PgStore({
-          conString: process.env.DATABASE_URL,
+          pool,
         })
       : new MemoryStore({
           checkPeriod: 1000 * 60 * 60 * 24,

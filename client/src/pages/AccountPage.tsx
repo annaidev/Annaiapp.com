@@ -23,6 +23,7 @@ import { useI18n } from "@/lib/i18n";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { api } from "@shared/routes";
+import { getManageSubscriptionUrl } from "@/services/mobileBillingService";
 
 function formatFeatureKey(featureKey: string) {
   return featureKey
@@ -53,6 +54,7 @@ export default function AccountPage() {
   const formattedEnabledFeatures = (entitlements?.enabledFeatures ?? []).map((feature) =>
     formatFeatureKey(feature),
   );
+  const manageSubscriptionUrl = getManageSubscriptionUrl(data?.subscription ?? null);
 
   const redeemCouponMutation = useMutation({
     mutationFn: async () => {
@@ -176,6 +178,13 @@ export default function AccountPage() {
               {!entitlements?.hasProAccess && (
                 <Button asChild variant="outline" className="rounded-2xl" data-testid="button-account-pricing">
                   <Link href="/pricing">{t("account.upgrade")}</Link>
+                </Button>
+              )}
+              {manageSubscriptionUrl && (
+                <Button asChild variant="outline" className="rounded-2xl" data-testid="button-account-manage-subscription">
+                  <a href={manageSubscriptionUrl} target="_blank" rel="noreferrer">
+                    Manage Subscription / Unsubscribe
+                  </a>
                 </Button>
               )}
               <Button

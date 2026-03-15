@@ -19,7 +19,8 @@
     "mobile:android": "npm run mobile:sync && npx cap open android",
     "mobile:ios": "npm run mobile:sync && npx cap open ios",
     "mobile:android:build": "tsx script/mobile-android-build.ts",
-    "coupon:create": "tsx script/create-coupon.ts"
+    "coupon:create": "tsx script/create-coupon.ts",
+    "seed:bootstrap": "tsx script/seed-bootstrap.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",

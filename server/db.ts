@@ -1,18 +1,17 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
+import { databasePoolConfig, hasDatabaseConfig } from "./databaseConfig";
 
 const { Pool } = pg;
 
-const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
+if (!hasDatabaseConfig) {
   console.warn(
-    "DATABASE_URL is not set. Using in-memory fallback storage for this process.",
+    "Database config is not set. Using in-memory fallback storage for this process.",
   );
 }
 
-export const pool = connectionString ? new Pool({ connectionString }) : null;
+export const pool = databasePoolConfig ? new Pool(databasePoolConfig) : null;
 export const db = pool ? drizzle(pool, { schema }) : null;
 
 export async function ensureDatabaseSchema(): Promise<void> {

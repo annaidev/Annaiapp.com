@@ -2,8 +2,21 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 import { apiRequest } from "@/lib/queryClient";
 
 export const ANNAI_PRO_MONTHLY_PRODUCT_ID = "annai.pro.monthly.9_99";
+export const GOOGLE_PLAY_PACKAGE_NAME = "com.annai.travelplanner";
+
+export type AnnaiProPlan = {
+  planId: string;
+  label: string;
+  priceUsd: string;
+  periodMonths: number;
+  productId: string;
+  appleProductId: string;
+  googleProductId: string;
+};
 
 export type PurchaseContext = {
+  defaultPlanId: string;
+  availablePlans: AnnaiProPlan[];
   productId: string;
   apple: {
     appAccountToken: string;
@@ -58,7 +71,35 @@ export function isNativeBillingRuntime(): boolean {
   return getBillingRuntime() !== "web";
 }
 
-export async function startNativeSubscriptionPurchase(purchaseContext: PurchaseContext) {
+function selectPlanFromContext(purchaseContext: PurchaseContext, selectedPlanId?: string) {
+  if (!purchaseContext.availablePlans.length) return null;
+  return (
+    purchaseContext.availablePlans.find((plan) => plan.planId === selectedPlanId) ??
+    purchaseContext.availablePlans.find((plan) => plan.planId === purchaseContext.defaultPlanId) ??
+    purchaseContext.availablePlans[0]
+  );
+}
+
+export function getManageSubscriptionUrl(subscription?: { platform?: string | null; productId?: string | null } | null): string | null {
+  if (!subscription?.platform) {
+    return null;
+  }
+
+  if (subscription.platform === "ios") {
+    return "https://apps.apple.com/account/subscriptions";
+  }
+
+  if (subscription.platform === "android") {
+    if (subscription.productId) {
+      return `https://play.google.com/store/account/subscriptions?sku=${encodeURIComponent(subscription.productId)}&package=${encodeURIComponent(GOOGLE_PLAY_PACKAGE_NAME)}`;
+    }
+    return "https://play.google.com/store/account/subscriptions";
+  }
+
+  return null;
+}
+
+export async function startNativeSubscriptionPurchase(purchaseContext: PurchaseContext, selectedPlanId?: string) {
   const runtime = getBillingRuntime();
   if (runtime === "web") {
     return {
@@ -68,15 +109,27 @@ export async function startNativeSubscriptionPurchase(purchaseContext: PurchaseC
     };
   }
 
+  const selectedPlan = selectPlanFromContext(purchaseContext, selectedPlanId);
+
   try {
     const result =
       runtime === "ios"
         ? await BillingBridge.purchaseSubscription({
-            productId: purchaseContext.apple.productId || purchaseContext.productId || ANNAI_PRO_MONTHLY_PRODUCT_ID,
+            productId:
+              selectedPlan?.appleProductId ||
+              purchaseContext.apple.productId ||
+              selectedPlan?.productId ||
+              purchaseContext.productId ||
+              ANNAI_PRO_MONTHLY_PRODUCT_ID,
             appAccountToken: purchaseContext.apple.appAccountToken,
           })
         : await BillingBridge.purchaseSubscription({
-            productId: purchaseContext.google.productId || purchaseContext.productId || ANNAI_PRO_MONTHLY_PRODUCT_ID,
+            productId:
+              selectedPlan?.googleProductId ||
+              purchaseContext.google.productId ||
+              selectedPlan?.productId ||
+              purchaseContext.productId ||
+              ANNAI_PRO_MONTHLY_PRODUCT_ID,
             obfuscatedExternalAccountId: purchaseContext.google.obfuscatedExternalAccountId,
             obfuscatedExternalProfileId: purchaseContext.google.obfuscatedExternalProfileId,
         });

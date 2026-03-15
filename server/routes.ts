@@ -33,7 +33,51 @@ const openaiApiKey =
 const openai = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
 
 const AI_MODEL = "gpt-4o-mini";
-const ANNAI_PRO_MONTHLY_PRODUCT_ID = "annai.pro.monthly.9_99";
+type AnnaiProPlanId = "monthly" | "quarterly" | "yearly";
+
+type AnnaiProPlan = {
+  planId: AnnaiProPlanId;
+  label: string;
+  priceUsd: string;
+  periodMonths: number;
+  productId: string;
+  appleProductId: string;
+  googleProductId: string;
+};
+
+const ANNAI_PRO_PLANS: AnnaiProPlan[] = [
+  {
+    planId: "monthly",
+    label: "Annai Pro Monthly",
+    priceUsd: "9.99",
+    periodMonths: 1,
+    productId: "annai.pro.monthly.9_99",
+    appleProductId: "annai.pro.monthly.9_99",
+    googleProductId: "annai.pro.monthly.9_99",
+  },
+  {
+    planId: "quarterly",
+    label: "Annai Pro Quarterly",
+    priceUsd: "24.99",
+    periodMonths: 3,
+    productId: "annai.pro.quarterly.24_99",
+    appleProductId: "annai.pro.quarterly.24_99",
+    googleProductId: "annai.pro.quarterly.24_99",
+  },
+  {
+    planId: "yearly",
+    label: "Annai Pro Yearly",
+    priceUsd: "69.99",
+    periodMonths: 12,
+    productId: "annai.pro.yearly.69_99",
+    appleProductId: "annai.pro.yearly.69_99",
+    googleProductId: "annai.pro.yearly.69_99",
+  },
+];
+const DEFAULT_ANNAI_PRO_PLAN_ID: AnnaiProPlanId = "monthly";
+const DEFAULT_ANNAI_PRO_PRODUCT_ID = ANNAI_PRO_PLANS.find(
+  (plan) => plan.planId === DEFAULT_ANNAI_PRO_PLAN_ID,
+)!.productId;
 const CAMPING_APP_URL = (
   process.env.ANNAI_CAMPING_URL ??
   (process.env.NODE_ENV === "production" ? "" : "http://127.0.0.1:5001")
@@ -86,6 +130,14 @@ function getLanguageName(language: string) {
 function getAiLanguageInstruction(user: NonNullable<Express.User> | Awaited<ReturnType<typeof storage.getUser>>) {
   const language = getUserLanguage(user);
   return `Respond in ${getLanguageName(language)}.`;
+}
+
+function resolveAnnaiProPlan(planId?: string | null): AnnaiProPlan {
+  if (!planId) {
+    return ANNAI_PRO_PLANS.find((plan) => plan.planId === DEFAULT_ANNAI_PRO_PLAN_ID)!;
+  }
+  const matched = ANNAI_PRO_PLANS.find((plan) => plan.planId === planId);
+  return matched ?? ANNAI_PRO_PLANS.find((plan) => plan.planId === DEFAULT_ANNAI_PRO_PLAN_ID)!;
 }
 
 function resolveCountryCode(value?: string | null): string | null {
@@ -1042,16 +1094,21 @@ export async function registerRoutes(
   app.get(api.subscription.purchaseContext.path, requireAuth, async (req, res) => {
     const annaiUserId = await ensureAnnaiUserId(req.user!);
     const appleAppAccountToken = await ensureAppleAppAccountToken(req.user!);
+    const requestedPlanId = typeof req.query.planId === "string" ? req.query.planId : undefined;
+    const selectedPlan = resolveAnnaiProPlan(requestedPlanId);
+
     res.json({
-      productId: ANNAI_PRO_MONTHLY_PRODUCT_ID,
+      defaultPlanId: DEFAULT_ANNAI_PRO_PLAN_ID,
+      availablePlans: ANNAI_PRO_PLANS,
+      productId: selectedPlan.productId,
       apple: {
         appAccountToken: appleAppAccountToken,
-        productId: ANNAI_PRO_MONTHLY_PRODUCT_ID,
+        productId: selectedPlan.appleProductId,
       },
       google: {
         obfuscatedExternalAccountId: annaiUserId,
         obfuscatedExternalProfileId: annaiUserId,
-        productId: ANNAI_PRO_MONTHLY_PRODUCT_ID,
+        productId: selectedPlan.googleProductId,
       },
     });
   });
@@ -1069,7 +1126,7 @@ export async function registerRoutes(
       }
 
       const productId =
-        typeof transaction.productId === "string" ? transaction.productId : ANNAI_PRO_MONTHLY_PRODUCT_ID;
+        typeof transaction.productId === "string" ? transaction.productId : DEFAULT_ANNAI_PRO_PRODUCT_ID;
       const originalTransactionId =
         typeof transaction.originalTransactionId === "string"
           ? transaction.originalTransactionId
@@ -2291,7 +2348,7 @@ Rules:
       user: target,
       status: payload.status,
       platform: payload.platform ?? "manual",
-      productId: payload.productId ?? ANNAI_PRO_MONTHLY_PRODUCT_ID,
+      productId: payload.productId ?? DEFAULT_ANNAI_PRO_PRODUCT_ID,
       transactionId: payload.originalTransactionId ?? `manual:${target.id}:${Date.now()}`,
       expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : null,
       isSandbox: payload.isSandbox ?? true,
@@ -2320,7 +2377,7 @@ Rules:
       const originalTransactionId =
         typeof transaction?.originalTransactionId === "string" ? transaction.originalTransactionId : transactionId;
       const productId =
-        typeof transaction?.productId === "string" ? transaction.productId : ANNAI_PRO_MONTHLY_PRODUCT_ID;
+        typeof transaction?.productId === "string" ? transaction.productId : DEFAULT_ANNAI_PRO_PRODUCT_ID;
       const appAccountToken =
         typeof transaction?.appAccountToken === "string" ? transaction.appAccountToken : undefined;
       const expiresAtRaw =

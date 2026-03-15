@@ -1,3 +1,4 @@
+import "./loadEnv";
 import { db } from "./db";
 import {
   users,
@@ -1081,4 +1082,4 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage: IStorage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();
+export const storage: IStorage = db ? new DatabaseStorage() : new MemStorage();

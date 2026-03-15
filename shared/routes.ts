@@ -47,6 +47,16 @@ const subscriptionRecordSchema = z.object({
   isSandbox: z.boolean().optional(),
 });
 
+const subscriptionPlanSchema = z.object({
+  planId: z.string(),
+  label: z.string(),
+  priceUsd: z.string(),
+  periodMonths: z.number().int().positive(),
+  productId: z.string(),
+  appleProductId: z.string(),
+  googleProductId: z.string(),
+});
+
 const moduleSchema = z.object({
   slug: z.enum(moduleSlugValues),
   name: z.string(),
@@ -340,6 +350,8 @@ export const api = {
       path: "/api/subscription/purchase-context" as const,
       responses: {
         200: z.object({
+          defaultPlanId: z.string(),
+          availablePlans: z.array(subscriptionPlanSchema),
           productId: z.string(),
           apple: z.object({
             appAccountToken: z.string(),
