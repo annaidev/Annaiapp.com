@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
-import { Globe } from "lucide-react";
+import { AnnaiLogo } from "@/components/AnnaiLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 type TravelAuthResponse = {
@@ -48,7 +48,7 @@ export default function TravelAuthPage() {
         <CardContent className="p-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-3 bg-primary/10 rounded-2xl">
-              <Globe className="h-8 w-8 text-primary" />
+              <AnnaiLogo className="h-16 w-auto" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground">Opening Annai Travel</h1>

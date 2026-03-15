@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Loader2, Globe, MapPin, Plane, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { AnnaiLogo } from "@/components/AnnaiLogo";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
@@ -204,7 +205,7 @@ export default function AuthPage() {
           </div>
           <div className="flex items-center gap-3 mb-8">
             <div className="p-3 bg-primary/10 rounded-2xl">
-              <Globe className="h-8 w-8 text-primary" />
+              <AnnaiLogo className="h-16 w-auto" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground" data-testid="text-auth-title">
@@ -431,6 +432,7 @@ export default function AuthPage() {
 
       <div className="hidden lg:flex flex-1 bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10 items-center justify-center p-12">
         <div className="max-w-lg text-center space-y-8">
+          <AnnaiLogo className="mx-auto h-[120px] w-auto" />
           <div className="flex justify-center gap-4">
             <div className="p-4 bg-primary/20 rounded-2xl">
               <Plane className="h-10 w-10 text-primary" />
