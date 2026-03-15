@@ -1,17 +1,24 @@
-﻿import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "wouter";
-import { Crown, Globe2, Gift, ShieldAlert, ShieldCheck, User } from "lucide-react";
+import { Crown, Gift, LogOut, ShieldAlert, ShieldCheck, User } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { useDeleteAccount, useUser } from "@/hooks/use-auth";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useDeleteAccount, useLogout, useUser } from "@/hooks/use-auth";
 import { useSubscriptionState } from "@/hooks/use-entitlements";
-import { useProfile, useUpdateProfile } from "@/hooks/use-profile";
 import { useI18n } from "@/lib/i18n";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -31,13 +38,9 @@ function formatFeatureKey(featureKey: string) {
 export default function AccountPage() {
   const { data: user } = useUser();
   const { data } = useSubscriptionState(Boolean(user));
-  const { data: profile } = useProfile(Boolean(user));
-  const updateProfile = useUpdateProfile();
   const entitlements = data?.entitlements;
-  const { t, languageOptions, language, setLanguage } = useI18n();
+  const { t } = useI18n();
   const { toast } = useToast();
-  const [homeCurrency, setHomeCurrency] = useState("USD");
-  const [citizenship, setCitizenship] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -46,55 +49,32 @@ export default function AccountPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const queryClient = useQueryClient();
   const deleteAccountMutation = useDeleteAccount();
-  const formattedEnabledFeatures = (entitlements?.enabledFeatures ?? []).map((feature) => formatFeatureKey(feature));
-
-  useEffect(() => {
-    if (profile?.homeCurrency) {
-      setHomeCurrency(profile.homeCurrency);
-    }
-    setCitizenship(profile?.citizenship ?? "");
-  }, [profile?.citizenship, profile?.homeCurrency]);
-
-  const saveProfile = () => {
-    updateProfile.mutate(
-      {
-        preferredLanguage: language,
-        homeCurrency: homeCurrency.toUpperCase(),
-        citizenship: citizenship.trim() || null,
-      },
-      {
-        onSuccess: () => {
-          toast({ title: "Profile updated", description: "Your travel preferences have been saved." });
-        },
-        onError: (error) => {
-          toast({
-            title: "Unable to update profile",
-            description: error instanceof Error ? error.message : "Profile update failed.",
-            variant: "destructive",
-          });
-        },
-      },
-    );
-  };
+  const logoutMutation = useLogout();
+  const formattedEnabledFeatures = (entitlements?.enabledFeatures ?? []).map((feature) =>
+    formatFeatureKey(feature),
+  );
 
   const redeemCouponMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest(api.coupons.redeem.method, api.coupons.redeem.path, { code: couponCode });
       return res.json() as Promise<{ expiresAt: string }>;
     },
-    onSuccess: async (data) => {
+    onSuccess: async (redeemResult) => {
       setCouponCode("");
       await queryClient.invalidateQueries({ queryKey: ["/api/entitlements/me"] });
       await queryClient.invalidateQueries({ queryKey: ["/api/subscription/me"] });
       toast({
         title: "Gift code redeemed",
-        description: `Annai Pro is active until ${new Date(data.expiresAt).toLocaleDateString()}.`,
+        description: `Annai Pro is active until ${new Date(redeemResult.expiresAt).toLocaleDateString()}.`,
       });
     },
     onError: (error) => {
       toast({
         title: "Unable to redeem code",
-        description: error instanceof Error ? error.message.split(":").slice(1).join(":").trim() || error.message : "Coupon redemption failed.",
+        description:
+          error instanceof Error
+            ? error.message.split(":").slice(1).join(":").trim() || error.message
+            : "Coupon redemption failed.",
         variant: "destructive",
       });
     },
@@ -119,16 +99,17 @@ export default function AccountPage() {
     onError: (error) => {
       toast({
         title: "Unable to change password",
-        description: error instanceof Error ? error.message.split(":").slice(1).join(":").trim() || error.message : "Password update failed.",
+        description:
+          error instanceof Error
+            ? error.message.split(":").slice(1).join(":").trim() || error.message
+            : "Password update failed.",
         variant: "destructive",
       });
     },
   });
 
   const canDeleteAccount = deletePhrase.trim() === "DELETE";
-  const isPasswordFormValid =
-    newPassword.length >= 10 &&
-    confirmNewPassword === newPassword;
+  const isPasswordFormValid = newPassword.length >= 10 && confirmNewPassword === newPassword;
 
   return (
     <div className="min-h-screen bg-background">
@@ -147,7 +128,10 @@ export default function AccountPage() {
                 <User className="mr-1.5 h-3.5 w-3.5" />
                 {user?.username ?? "Annai user"}
               </Badge>
-              <Badge variant={entitlements?.hasProAccess ? "default" : "secondary"} className="rounded-full px-3 py-1">
+              <Badge
+                variant={entitlements?.hasProAccess ? "default" : "secondary"}
+                className="rounded-full px-3 py-1"
+              >
                 <Crown className="mr-1.5 h-3.5 w-3.5" />
                 {entitlements?.hasProAccess ? t("plan.pro") : t("plan.free")}
               </Badge>
@@ -171,7 +155,9 @@ export default function AccountPage() {
                 <p className="mt-1 text-lg font-semibold text-foreground">{data?.subscription?.status ?? "inactive"}</p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {data?.subscription?.productId ?? "No product linked yet"}
-                  {data?.subscription?.expiresAt ? ` â€¢ ${new Date(data.subscription.expiresAt).toLocaleDateString()}` : ""}
+                  {data?.subscription?.expiresAt
+                    ? ` • ${new Date(data.subscription.expiresAt).toLocaleDateString()}`
+                    : ""}
                 </p>
               </div>
 
@@ -192,6 +178,16 @@ export default function AccountPage() {
                   <Link href="/pricing">{t("account.upgrade")}</Link>
                 </Button>
               )}
+              <Button
+                variant="outline"
+                className="rounded-2xl"
+                onClick={() => logoutMutation.mutate()}
+                disabled={logoutMutation.isPending}
+                data-testid="button-account-signout"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                {logoutMutation.isPending ? "Signing out..." : "Sign Out"}
+              </Button>
             </div>
           </Card>
 
@@ -199,72 +195,13 @@ export default function AccountPage() {
             <Card className="rounded-[2rem] border p-8 shadow-sm">
               <div className="mb-6 flex items-center gap-3">
                 <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-                  <Globe2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-foreground">{t("account.profile")}</h2>
-                  <p className="text-sm text-muted-foreground">Keep the app and AI output aligned to your traveler preferences.</p>
-                </div>
-              </div>
-
-              <div className="space-y-5">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">{t("account.language")}</label>
-                  <Select value={language} onValueChange={(value) => setLanguage(value as typeof language)}>
-                    <SelectTrigger className="rounded-2xl">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {languageOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">{t("account.currency")}</label>
-                  <Input
-                    value={homeCurrency}
-                    onChange={(event) => setHomeCurrency(event.target.value.toUpperCase().slice(0, 3))}
-                    className="rounded-2xl"
-                    placeholder="USD"
-                    maxLength={3}
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Citizenship</label>
-                  <Input
-                    value={citizenship}
-                    onChange={(event) => setCitizenship(event.target.value)}
-                    className="rounded-2xl"
-                    placeholder="United States"
-                    maxLength={120}
-                  />
-                </div>
-
-                <Button
-                  className="w-full rounded-2xl"
-                  onClick={saveProfile}
-                  disabled={updateProfile.isPending}
-                  data-testid="button-save-profile"
-                >
-                  {updateProfile.isPending ? "Saving..." : t("account.saveProfile")}
-                </Button>
-              </div>
-            </Card>
-
-            <Card className="rounded-[2rem] border p-8 shadow-sm">
-              <div className="mb-6 flex items-center gap-3">
-                <div className="rounded-2xl bg-primary/10 p-3 text-primary">
                   <Gift className="h-5 w-5" />
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-foreground">Redeem Gift Code</h2>
-                  <p className="text-sm text-muted-foreground">Use a one-time family or tester code to unlock 30 days of Annai Pro.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Use a one-time family or tester code to unlock 30 days of Annai Pro.
+                  </p>
                 </div>
               </div>
 
@@ -326,7 +263,8 @@ export default function AccountPage() {
 
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  This permanently removes your account, trips, itinerary items, packing lists, budget items, saved documents, and active session access.
+                  This permanently removes your account, trips, itinerary items, packing lists, budget items, saved
+                  documents, and active session access.
                 </p>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-muted-foreground">
@@ -377,9 +315,7 @@ export default function AccountPage() {
         <AlertDialogContent className="rounded-3xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Change password</AlertDialogTitle>
-            <AlertDialogDescription>
-              Enter a new password for your account.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Enter a new password for your account.</AlertDialogDescription>
           </AlertDialogHeader>
 
           <div className="space-y-4">
@@ -443,7 +379,8 @@ export default function AccountPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete account?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action is permanent. Your Annai account and associated trip data will be deleted and cannot be recovered.
+              This action is permanent. Your Annai account and associated trip data will be deleted and cannot be
+              recovered.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -460,7 +397,10 @@ export default function AccountPage() {
                   onError: (error) => {
                     toast({
                       title: "Unable to delete account",
-                      description: error instanceof Error ? error.message.split(":").slice(1).join(":").trim() || error.message : "Account deletion failed.",
+                      description:
+                        error instanceof Error
+                          ? error.message.split(":").slice(1).join(":").trim() || error.message
+                          : "Account deletion failed.",
                       variant: "destructive",
                     });
                   },

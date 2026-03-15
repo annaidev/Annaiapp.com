@@ -27,6 +27,9 @@ export type SupportedLanguage = (typeof supportedLanguageValues)[number];
 export const tripTypeValues = ["one_way", "round_trip"] as const;
 export type TripType = (typeof tripTypeValues)[number];
 
+export const packingCategoryValues = ["home", "arrival"] as const;
+export type PackingCategory = (typeof packingCategoryValues)[number];
+
 export const subscriptionStatusValues = [
   "inactive",
   "active",
@@ -56,6 +59,10 @@ export const users = pgTable("annai_travel_users", {
   preferredLanguage: text("preferred_language").notNull().default("en"),
   homeCurrency: text("home_currency").notNull().default("USD"),
   citizenship: text("citizenship"),
+  travelWithKids: boolean("travel_with_kids").notNull().default(false),
+  travelWithPets: boolean("travel_with_pets").notNull().default(false),
+  travelForWork: boolean("travel_for_work").notNull().default(false),
+  needsAccessibility: boolean("needs_accessibility").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -78,6 +85,7 @@ export const packingLists = pgTable("annai_travel_packing_lists", {
   tripId: integer("trip_id").notNull().references(() => trips.id, { onDelete: "cascade" }),
   item: text("item").notNull(),
   isPacked: boolean("is_packed").default(false),
+  category: text("category").notNull().default("home"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -100,6 +108,13 @@ export const travelDocuments = pgTable("annai_travel_documents", {
   notes: text("notes"),
   attachmentName: text("attachment_name"),
   attachmentDataUrl: text("attachment_data_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const profilePackingItems = pgTable("annai_travel_profile_packing_items", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  item: text("item").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -187,6 +202,7 @@ export const couponCodes = pgTable("annai_travel_coupon_codes", {
 export const usersRelations = relations(users, ({ many }) => ({
   trips: many(trips),
   giftedEntitlements: many(giftedEntitlements),
+  profilePackingItems: many(profilePackingItems),
 }));
 
 export const tripsRelations = relations(trips, ({ one, many }) => ({
@@ -204,6 +220,13 @@ export const packingListsRelations = relations(packingLists, ({ one }) => ({
   trip: one(trips, {
     fields: [packingLists.tripId],
     references: [trips.id],
+  }),
+}));
+
+export const profilePackingItemsRelations = relations(profilePackingItems, ({ one }) => ({
+  user: one(users, {
+    fields: [profilePackingItems.userId],
+    references: [users.id],
   }),
 }));
 
@@ -232,6 +255,7 @@ export const itineraryItemsRelations = relations(itineraryItems, ({ one }) => ({
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertTripSchema = createInsertSchema(trips).omit({ id: true, createdAt: true });
 export const insertPackingListSchema = createInsertSchema(packingLists).omit({ id: true, createdAt: true });
+export const insertProfilePackingItemSchema = createInsertSchema(profilePackingItems).omit({ id: true, createdAt: true });
 export const insertBudgetItemSchema = createInsertSchema(budgetItems).omit({ id: true, createdAt: true });
 export const insertTravelDocumentSchema = createInsertSchema(travelDocuments).omit({ id: true, createdAt: true });
 export const insertItineraryItemSchema = createInsertSchema(itineraryItems).omit({ id: true, createdAt: true });
@@ -254,7 +278,18 @@ export const insertCouponCodeSchema = createInsertSchema(couponCodes).omit({
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
-export type TravelerProfile = Pick<User, "id" | "username" | "preferredLanguage" | "homeCurrency" | "citizenship">;
+export type TravelerProfile = Pick<
+  User,
+  | "id"
+  | "username"
+  | "preferredLanguage"
+  | "homeCurrency"
+  | "citizenship"
+  | "travelWithKids"
+  | "travelWithPets"
+  | "travelForWork"
+  | "needsAccessibility"
+>;
 
 export type Trip = typeof trips.$inferSelect;
 export type InsertTrip = z.infer<typeof insertTripSchema>;
@@ -269,6 +304,9 @@ export type CreatePackingListRequest = InsertPackingList;
 export type UpdatePackingListRequest = Partial<InsertPackingList>;
 export type PackingListResponse = PackingList;
 export type PackingListsResponse = PackingList[];
+
+export type ProfilePackingItem = typeof profilePackingItems.$inferSelect;
+export type InsertProfilePackingItem = z.infer<typeof insertProfilePackingItemSchema>;
 
 export type BudgetItem = typeof budgetItems.$inferSelect;
 export type InsertBudgetItem = z.infer<typeof insertBudgetItemSchema>;

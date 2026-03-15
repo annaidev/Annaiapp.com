@@ -75,6 +75,17 @@ export default function ItineraryBuilder() {
     },
   });
 
+  const clearAllMutation = useMutation({
+    mutationFn: async () => {
+      const url = buildUrl(api.itineraryItems.clearByTrip.path, { tripId });
+      await apiRequest(api.itineraryItems.clearByTrip.method, url);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.itineraryItems.listByTrip.path, tripId] });
+      toast({ title: "Cleared", description: "Full itinerary deleted." });
+    },
+  });
+
   const updateMutation = useMutation({
     mutationFn: async (data: {
       id: number;
@@ -217,13 +228,30 @@ export default function ItineraryBuilder() {
               </div>
             </div>
 
-            <Button
-              onClick={() => setShowForm(!showForm)}
-              className="rounded-xl bg-secondary hover:bg-secondary/90 shadow-lg shadow-secondary/20"
-              data-testid="button-toggle-add-form"
-            >
-              <Plus className="h-5 w-5 mr-2" /> Add Activity
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => setShowForm(!showForm)}
+                className="rounded-xl bg-secondary hover:bg-secondary/90 shadow-lg shadow-secondary/20"
+                data-testid="button-toggle-add-form"
+              >
+                <Plus className="h-5 w-5 mr-2" /> Add Activity
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (!items?.length) return;
+                  const confirmed = window.confirm("Delete the full itinerary for this trip?");
+                  if (!confirmed) return;
+                  clearAllMutation.mutate();
+                }}
+                disabled={clearAllMutation.isPending || !items?.length}
+                className="rounded-xl"
+                data-testid="button-clear-itinerary"
+              >
+                <Trash2 className="h-5 w-5 mr-2" />
+                {clearAllMutation.isPending ? "Deleting..." : "Delete Full Itinerary"}
+              </Button>
+            </div>
           </div>
 
           {showForm && (

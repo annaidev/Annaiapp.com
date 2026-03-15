@@ -109,17 +109,26 @@ export function useDeleteTrip() {
   return useMutation({
     mutationFn: async (id: number) => {
       const url = buildUrl(api.trips.delete.path, { id });
-      const res = await fetch(url, {
-        method: api.trips.delete.method,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to delete trip");
+      await apiRequest(api.trips.delete.method, url);
+      return id;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.trips.list.path] });
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: [api.trips.list.path] });
+      const previousTrips = queryClient.getQueryData<TripsListResponse>([api.trips.list.path]);
+      queryClient.setQueryData<TripsListResponse>(
+        [api.trips.list.path],
+        (currentTrips) => (currentTrips ?? []).filter((trip) => trip.id !== id),
+      );
+      return { previousTrips };
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: [api.trips.list.path] });
       toast({ title: "Trip deleted", description: "The trip has been removed." });
     },
-    onError: (error) => {
+    onError: (error, _id, context) => {
+      if (context?.previousTrips) {
+        queryClient.setQueryData([api.trips.list.path], context.previousTrips);
+      }
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });

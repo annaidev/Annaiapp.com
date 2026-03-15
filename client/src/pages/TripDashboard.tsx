@@ -15,6 +15,7 @@ import { AiMarkdownCards } from "@/components/AiMarkdownCards";
 import { Button } from "@/components/ui/button";
 import { TripForm } from "@/components/TripForm";
 import { SafetyMap } from "@/components/SafetyMap";
+import { TripPackingPanel } from "@/components/TripPackingPanel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -84,14 +85,92 @@ type AssistantMessage = {
   createdItineraryItem?: Pick<ItineraryItem, "id" | "title" | "dayNumber" | "timeSlot"> | null;
 };
 
+type QuickBookingContext = {
+  origin: string | null;
+  destination: string;
+  startDate: Date | string | null;
+  endDate: Date | string | null;
+  tripType: "one_way" | "round_trip";
+};
+
+function toYmd(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function buildFlightsUrl(context: QuickBookingContext): string {
+  const origin = context.origin?.trim();
+  const destination = context.destination.trim();
+  const departDate = toYmd(context.startDate);
+  const returnDate = context.tripType === "round_trip" ? toYmd(context.endDate) : null;
+  const query = [
+    origin && destination ? `Flights from ${origin} to ${destination}` : `Flights to ${destination}`,
+    departDate ? `depart ${departDate}` : null,
+    returnDate ? `return ${returnDate}` : context.tripType === "round_trip" ? "round trip" : "one way",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return `https://www.google.com/travel/flights?q=${encodeURIComponent(query)}`;
+}
+
+function buildUberUrl(context: QuickBookingContext): string {
+  const url = new URL("https://m.uber.com/ul/");
+  url.searchParams.set("action", "setPickup");
+  url.searchParams.set("pickup", "my_location");
+  url.searchParams.set("dropoff[formatted_address]", context.destination.trim());
+  return url.toString();
+}
+
+function buildAirbnbUrl(context: QuickBookingContext): string {
+  const url = new URL("https://www.airbnb.com/s/homes");
+  url.searchParams.set("query", context.destination.trim());
+  const checkIn = toYmd(context.startDate);
+  const checkOut = toYmd(context.endDate);
+  if (checkIn) url.searchParams.set("checkin", checkIn);
+  if (checkOut && context.tripType === "round_trip") url.searchParams.set("checkout", checkOut);
+  return url.toString();
+}
+
+function buildHotelsUrl(context: QuickBookingContext): string {
+  const url = new URL("https://www.booking.com/searchresults.html");
+  url.searchParams.set("ss", context.destination.trim());
+  const checkIn = toYmd(context.startDate);
+  const checkOut = toYmd(context.endDate);
+  if (checkIn) url.searchParams.set("checkin", checkIn);
+  if (checkOut && context.tripType === "round_trip") url.searchParams.set("checkout", checkOut);
+  return url.toString();
+}
+
+function buildRentalCarUrl(context: QuickBookingContext): string {
+  const destination = context.destination.trim();
+  const start = toYmd(context.startDate);
+  const end = toYmd(context.endDate);
+  if (start && end && context.tripType === "round_trip") {
+    return `https://www.kayak.com/cars/${encodeURIComponent(destination)}/${start}/${end}`;
+  }
+  return `https://www.kayak.com/cars/${encodeURIComponent(destination)}`;
+}
+
+function buildTuroUrl(context: QuickBookingContext): string {
+  const url = new URL("https://turo.com/us/en/search");
+  url.searchParams.set("searchTerm", context.destination.trim());
+  const start = toYmd(context.startDate);
+  const end = toYmd(context.endDate);
+  if (start) url.searchParams.set("startDate", start);
+  if (end && context.tripType === "round_trip") url.searchParams.set("endDate", end);
+  return url.toString();
+}
+
 const EXTERNAL_LINKS = [
-  { name: "Airbnb", icon: <Home className="h-5 w-5" />, color: "bg-[#FF5A5F]/10 text-[#FF5A5F]", getUrl: (dest: string) => `https://www.airbnb.com/s/${encodeURIComponent(dest)}/homes` },
-  { name: "Flights", icon: <Plane className="h-5 w-5" />, color: "bg-blue-500/10 text-blue-600", getUrl: (dest: string) => `https://www.google.com/travel/flights?q=${encodeURIComponent(dest)}` },
-  { name: "Hotels", icon: <Building2 className="h-5 w-5" />, color: "bg-indigo-500/10 text-indigo-600", getUrl: (dest: string) => `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest)}` },
-  { name: "Uber", icon: <Car className="h-5 w-5" />, color: "bg-black/10 text-black dark:bg-white/10 dark:text-white", getUrl: () => `https://m.uber.com/looking` },
-  { name: "Metro", icon: <Route className="h-5 w-5" />, color: "bg-emerald-500/10 text-emerald-600", getUrl: (dest: string) => `https://www.google.com/search?q=${encodeURIComponent(`${dest} metro map`)}` },
-  { name: "Rental Car", icon: <Car className="h-5 w-5" />, color: "bg-orange-500/10 text-orange-600", getUrl: (dest: string) => `https://www.kayak.com/cars/${encodeURIComponent(dest)}` },
-  { name: "Turo", icon: <Car className="h-5 w-5" />, color: "bg-sky-500/10 text-sky-600", getUrl: (dest: string) => `https://turo.com/us/en/search?searchTerm=${encodeURIComponent(dest)}` },
+  { name: "Airbnb", icon: <Home className="h-5 w-5" />, color: "bg-[#FF5A5F]/10 text-[#FF5A5F]", getUrl: (context: QuickBookingContext) => buildAirbnbUrl(context) },
+  { name: "Flights", icon: <Plane className="h-5 w-5" />, color: "bg-blue-500/10 text-blue-600", getUrl: (context: QuickBookingContext) => buildFlightsUrl(context) },
+  { name: "Hotels", icon: <Building2 className="h-5 w-5" />, color: "bg-indigo-500/10 text-indigo-600", getUrl: (context: QuickBookingContext) => buildHotelsUrl(context) },
+  { name: "Uber", icon: <Car className="h-5 w-5" />, color: "bg-black/10 text-black dark:bg-white/10 dark:text-white", getUrl: (context: QuickBookingContext) => buildUberUrl(context) },
+  { name: "Metro", icon: <Route className="h-5 w-5" />, color: "bg-emerald-500/10 text-emerald-600", getUrl: (context: QuickBookingContext) => `https://www.google.com/search?q=${encodeURIComponent(`${context.destination} metro map`)}` },
+  { name: "Rental Car", icon: <Car className="h-5 w-5" />, color: "bg-orange-500/10 text-orange-600", getUrl: (context: QuickBookingContext) => buildRentalCarUrl(context) },
+  { name: "Turo", icon: <Car className="h-5 w-5" />, color: "bg-sky-500/10 text-sky-600", getUrl: (context: QuickBookingContext) => buildTuroUrl(context) },
 ];
 
 type AiBlock =
@@ -268,6 +347,18 @@ function getCountdownText(startDate: Date | string | null, endDate: Date | strin
   return "Happening now!";
 }
 
+function clampTripPlanDays(value: number): number {
+  return Math.max(1, Math.min(21, value));
+}
+
+function parseTripPlanDaysInput(raw: string, fallback: number): number {
+  const digitsOnly = raw.replace(/[^\d]/g, "");
+  if (!digitsOnly) return clampTripPlanDays(fallback);
+  const parsed = Number.parseInt(digitsOnly, 10);
+  if (!Number.isFinite(parsed)) return clampTripPlanDays(fallback);
+  return clampTripPlanDays(parsed);
+}
+
 export default function TripDashboard() {
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/trips/:id");
@@ -280,6 +371,7 @@ export default function TripDashboard() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "ai">("overview");
   const [activeAiTool, setActiveAiTool] = useState<"assistant" | "trip-plan" | "tips" | "safety" | "phrases" | "weather" | "customs" | null>(null);
+  const [packingPanelOpen, setPackingPanelOpen] = useState(false);
   
   const tipsMutation = useCulturalTips();
   const customsMutation = useCustomsEntry();
@@ -288,9 +380,12 @@ export default function TripDashboard() {
   const weatherMutation = useWeather();
   const tripPlanMutation = useTripPlan();
   const assistantMutation = useTravelAssistant();
+  const sectionAssistantMutation = useTravelAssistant();
   const [assistantQuestion, setAssistantQuestion] = useState("");
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [activeAssistantSuggestions, setActiveAssistantSuggestions] = useState<AssistantSuggestion[]>([]);
+  const [sectionQuestion, setSectionQuestion] = useState("");
+  const [sectionReply, setSectionReply] = useState("");
   const aiContentRef = useRef<HTMLDivElement | null>(null);
   const assistantThreadRef = useRef<HTMLDivElement | null>(null);
   const [tripPlanSettings, setTripPlanSettings] = useState<{
@@ -302,6 +397,7 @@ export default function TripDashboard() {
     planDepth: "quick",
     travelStyle: "balanced",
   });
+  const [tripPlanDaysInput, setTripPlanDaysInput] = useState("5");
 
   const [aiContent, setAiContent] = useState<
     | { type: "tips" | "safety" | "phrases" | "weather"; content: string }
@@ -341,6 +437,12 @@ export default function TripDashboard() {
 
     return () => window.clearTimeout(timer);
   }, [activeAiTool, assistantMessages.length, assistantMutation.isPending]);
+
+  useEffect(() => {
+    if (!activeAiTool || activeAiTool === "assistant") return;
+    setSectionQuestion("");
+    setSectionReply("");
+  }, [activeAiTool]);
 
   const { data: packingItems, isLoading: packingLoading } = useQuery({
     queryKey: [api.packingLists.listByTrip.path, tripId],
@@ -472,6 +574,13 @@ export default function TripDashboard() {
   if (!trip) return <div className="min-h-screen flex items-center justify-center">Trip not found</div>;
 
   const countdownText = getCountdownText(trip.startDate, trip.endDate);
+  const quickBookingContext: QuickBookingContext = {
+    origin: trip.origin ?? null,
+    destination: trip.destination,
+    startDate: trip.startDate ?? null,
+    endDate: trip.endDate ?? null,
+    tripType: trip.tripType === "round_trip" ? "round_trip" : "one_way",
+  };
   const packedCount = packingItems?.filter((i: any) => i.isPacked).length || 0;
   const totalPacking = packingItems?.length || 0;
   const packingPct = totalPacking > 0 ? Math.round((packedCount / totalPacking) * 100) : 0;
@@ -545,10 +654,13 @@ export default function TripDashboard() {
       setLocation("/pricing");
       return;
     }
+    const resolvedDays = parseTripPlanDaysInput(tripPlanDaysInput, tripPlanSettings.days);
+    setTripPlanSettings((current) => ({ ...current, days: resolvedDays }));
+    setTripPlanDaysInput(String(resolvedDays));
     tripPlanMutation.mutate(
       {
         destination: trip.destination,
-        days: tripPlanSettings.days,
+        days: resolvedDays,
         planDepth: tripPlanSettings.planDepth,
         travelStyle: tripPlanSettings.travelStyle,
       },
@@ -559,6 +671,86 @@ export default function TripDashboard() {
   };
   const handleOpenAssistant = () => {
     setActiveAiTool("assistant");
+  };
+  const getAiToolLabel = (tool: typeof activeAiTool) => {
+    switch (tool) {
+      case "assistant":
+        return t("trip.askAnnai");
+      case "trip-plan":
+        return t("trip.tripPlan");
+      case "tips":
+        return t("trip.culture");
+      case "safety":
+        return t("trip.safety");
+      case "customs":
+        return t("trip.customs");
+      case "phrases":
+        return t("trip.phrases");
+      case "weather":
+        return t("trip.weather");
+      default:
+        return "this section";
+    }
+  };
+  const getSectionContextSummary = () => {
+    if (!activeAiTool || !aiContent || aiContent.type !== activeAiTool) return "";
+
+    if (typeof aiContent.content === "string") {
+      return aiContent.content.slice(0, 2000);
+    }
+
+    if (aiContent.type === "trip-plan") {
+      return [
+        `Overview: ${aiContent.content.overview}`,
+        `Best for: ${aiContent.content.bestFor.join(", ")}`,
+        `Neighborhoods: ${aiContent.content.neighborhoods.join(", ")}`,
+        `Transport tips: ${aiContent.content.transportTips.join(" | ")}`,
+      ]
+        .join("\n")
+        .slice(0, 2000);
+    }
+
+    if (aiContent.type === "customs") {
+      return aiContent.content.sections
+        .map((section) => `${section.title}: ${section.summary}`)
+        .join("\n")
+        .slice(0, 2000);
+    }
+
+    return "";
+  };
+  const handleAskSectionAssistant = () => {
+    const question = sectionQuestion.trim();
+    if (!question || !activeAiTool || activeAiTool === "assistant") return;
+    if (!entitlements?.enabledFeatures.includes("ai_itinerary")) {
+      setLocation("/pricing");
+      return;
+    }
+
+    const sectionName = getAiToolLabel(activeAiTool);
+    const sectionContext = getSectionContextSummary();
+    const structuredQuestion = [
+      `Section focus: ${sectionName}`,
+      `Trip destination: ${trip.destination}`,
+      sectionContext ? `Current section details:\n${sectionContext}` : null,
+      `User question: ${question}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    setSectionReply("");
+    sectionAssistantMutation.mutate(
+      {
+        tripId,
+        question: structuredQuestion,
+      },
+      {
+        onSuccess: (data) => {
+          setSectionReply(data.answer);
+          setSectionQuestion("");
+        },
+      },
+    );
   };
   const handleAskAssistant = () => {
     const question = assistantQuestion.trim();
@@ -806,16 +998,21 @@ export default function TripDashboard() {
 
                 {/* Feature Cards Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Link href={`/trips/${trip.id}/packing-list`} className="block">
-                    <div className="bg-gradient-to-br from-primary/5 to-transparent rounded-3xl p-6 border border-primary/10 hover:border-primary/30 transition-colors h-full" data-testid="card-packing">
+                  <button
+                    type="button"
+                    onClick={() => setPackingPanelOpen(true)}
+                    className="block w-full text-left"
+                    data-testid="card-packing"
+                  >
+                    <div className="bg-gradient-to-br from-primary/5 to-transparent rounded-3xl p-6 border border-primary/10 hover:border-primary/30 transition-colors h-full">
                       <div className="flex items-center gap-3 mb-3">
                         <div className="p-3 bg-primary/20 text-primary rounded-2xl"><Briefcase className="h-5 w-5" /></div>
                         <h3 className="text-lg font-bold">{t("trip.packing")}</h3>
                       </div>
                       <p className="text-sm text-muted-foreground mb-3">{packedCount}/{totalPacking} items packed</p>
-                      <span className="text-primary text-sm font-medium inline-flex items-center">{t("trip.manage")} <ChevronRight className="h-4 w-4 ml-1" /></span>
+                      <span className="text-primary text-sm font-medium inline-flex items-center">Open Packing <ChevronRight className="h-4 w-4 ml-1" /></span>
                     </div>
-                  </Link>
+                  </button>
 
                   <Link href={`/trips/${trip.id}/budget`} className="block">
                     <div className="bg-gradient-to-br from-accent/5 to-transparent rounded-3xl p-6 border border-accent/10 hover:border-accent/30 transition-colors h-full" data-testid="card-budget">
@@ -855,7 +1052,7 @@ export default function TripDashboard() {
               <div className="space-y-6">
                 <h3 className="text-xl font-bold text-foreground mb-4">{t("trip.quickBookings")}</h3>
                 {EXTERNAL_LINKS.map((link) => (
-                  <a key={link.name} href={link.getUrl(trip.destination)} target="_blank" rel="noopener noreferrer"
+                  <a key={link.name} href={link.getUrl(quickBookingContext)} target="_blank" rel="noopener noreferrer"
                     className="flex items-center justify-between p-4 bg-card hover:bg-muted/50 transition-colors rounded-2xl border border-border/50 hover:shadow-md group"
                     data-testid={`link-${link.name.toLowerCase()}`}>
                     <div className="flex items-center gap-4">
@@ -994,16 +1191,18 @@ export default function TripDashboard() {
                         <label className="block text-sm text-muted-foreground">
                           {t("trip.days")}
                           <input
-                            type="number"
-                            min={1}
-                            max={21}
-                            value={tripPlanSettings.days}
-                            onChange={(event) =>
-                              setTripPlanSettings((current) => ({
-                                ...current,
-                                days: Math.max(1, Math.min(21, Number(event.target.value) || 1)),
-                              }))
-                            }
+                            type="text"
+                            inputMode="numeric"
+                            value={tripPlanDaysInput}
+                            onChange={(event) => {
+                              const nextValue = event.target.value.replace(/[^\d]/g, "").slice(0, 2);
+                              setTripPlanDaysInput(nextValue);
+                            }}
+                            onBlur={() => {
+                              const resolvedDays = parseTripPlanDaysInput(tripPlanDaysInput, tripPlanSettings.days);
+                              setTripPlanSettings((current) => ({ ...current, days: resolvedDays }));
+                              setTripPlanDaysInput(String(resolvedDays));
+                            }}
                             className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-foreground"
                             data-testid="input-trip-plan-days"
                           />
@@ -1283,6 +1482,63 @@ export default function TripDashboard() {
                     )}
                   </div>
                 )}
+
+                {activeAiTool && activeAiTool !== "assistant" && (
+                  <div className="rounded-3xl border border-border/50 bg-card p-5 shadow-xl">
+                    <div className="mb-3 flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Talk to Annai about {getAiToolLabel(activeAiTool)}
+                      </h3>
+                    </div>
+
+                    {sectionReply && (
+                      <div className="mb-3 rounded-2xl border border-border/60 bg-background p-4">
+                        <AiMarkdownCards
+                          content={sectionReply}
+                          autoLinkPlaces
+                          destinationContext={trip.destination}
+                        />
+                      </div>
+                    )}
+
+                    <form
+                      className="space-y-3 rounded-2xl border border-border/60 bg-background p-3"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        if (!sectionAssistantMutation.isPending && sectionQuestion.trim()) {
+                          handleAskSectionAssistant();
+                        }
+                      }}
+                    >
+                      <Textarea
+                        value={sectionQuestion}
+                        onChange={(event) => setSectionQuestion(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            if (!sectionAssistantMutation.isPending && sectionQuestion.trim()) {
+                              handleAskSectionAssistant();
+                            }
+                          }
+                        }}
+                        className="min-h-[88px] rounded-xl bg-white border-input"
+                        placeholder={`Ask a follow-up about ${getAiToolLabel(activeAiTool)}.`}
+                        data-testid="textarea-section-assistant"
+                      />
+                      <div className="flex justify-end">
+                        <Button
+                          type="submit"
+                          disabled={sectionAssistantMutation.isPending || !sectionQuestion.trim()}
+                          className="rounded-2xl"
+                          data-testid="button-section-assistant"
+                        >
+                          {sectionAssistantMutation.isPending ? "Loading..." : "Ask Annai"}
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -1290,6 +1546,7 @@ export default function TripDashboard() {
       </main>
 
       <TripForm open={isEditOpen} onOpenChange={setIsEditOpen} trip={trip} />
+      <TripPackingPanel tripId={tripId} open={packingPanelOpen} onOpenChange={setPackingPanelOpen} />
     </div>
   );
 }

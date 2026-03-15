@@ -47,7 +47,7 @@ function autoLinkPlaceRecommendations(content: string, destinationContext?: stri
   }
 
   return content.replace(
-    /(^|\n)(\s*(?:\d+\.\s+|[-*•]\s+))(\*\*)?(.+?)(\*\*)?(\s+(?:-|–|—)\s+)/g,
+    /(^|\n)(\s*(?:\d+\.\s+|[-*\u2022]\s+))(\*\*)?(.+?)(\*\*)?(\s+(?:-|\u2013|\u2014)\s+)/g,
     (
       match,
       lineStart: string,
@@ -76,7 +76,7 @@ function normalizeAiContent(content: string) {
     .replace(/([^\n])\s+(?=###[^\n]+)/g, "$1\n\n")
     .replace(/(##[^\n]+?)\s+(?=\d+\.\s)/g, "$1\n")
     .replace(/([^\n])\s+(?=\d+\.\s+\*\*)/g, "$1\n")
-    .replace(/([^\n])\s+(?=[-*•]\s+\*\*)/g, "$1\n")
+    .replace(/([^\n])\s+(?=[-*\u2022]\s+\*\*)/g, "$1\n")
     .replace(/\s+-\s+(?=\*\*)/g, "\n- ")
     .replace(/(\.\s+)(?=\*\*[^*]+\*\*:)/g, ".\n")
     .replace(/(\.\s+)(?=\d+\.\s)/g, ".\n")
@@ -85,8 +85,30 @@ function normalizeAiContent(content: string) {
 }
 
 function splitAiSections(content: string, destinationContext?: string) {
+  const normalizeSectionLead = (section: string) => {
+    const lines = section.split("\n");
+    if (!lines.length) return section;
+
+    const firstLine = lines[0]?.trim() ?? "";
+    const hasNumberedLead = /^\d+\.\s+\S/.test(firstLine);
+    const titleCandidate = firstLine.replace(/^\d+\.\s+/, "").trim();
+    const looksLikeSectionTitle =
+      titleCandidate.length >= 2 &&
+      titleCandidate.length <= 90 &&
+      !/https?:\/\//i.test(titleCandidate);
+    const hasFollowingContent = lines.slice(1).some((line) => line.trim().length > 0);
+
+    if (hasNumberedLead && looksLikeSectionTitle && hasFollowingContent) {
+      lines[0] = `### ${titleCandidate}`;
+      return lines.join("\n");
+    }
+
+    return section;
+  };
+
   return normalizeAiContent(autoLinkPlaceRecommendations(content, destinationContext))
     .split(/\n\s*\n/)
+    .map((section) => normalizeSectionLead(section.trim()))
     .map((section) => section.trim())
     .filter(Boolean);
 }

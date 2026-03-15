@@ -8,6 +8,7 @@ import {
   planTierValues,
   moduleSlugValues,
   featureKeyValues,
+  packingCategoryValues,
   subscriptionStatusValues,
   supportedLanguageValues,
   tripTypeValues,
@@ -75,6 +76,17 @@ const profileSchema = z.object({
   preferredLanguage: z.enum(supportedLanguageValues),
   homeCurrency: z.string(),
   citizenship: z.string().nullable(),
+  travelWithKids: z.boolean().default(false),
+  travelWithPets: z.boolean().default(false),
+  travelForWork: z.boolean().default(false),
+  needsAccessibility: z.boolean().default(false),
+});
+
+const profilePackingItemSchema = z.object({
+  id: z.number().int().positive(),
+  userId: z.number().int().positive(),
+  item: z.string().min(1).max(120),
+  createdAt: z.coerce.date(),
 });
 
 const itineraryCategorySchema = z.enum(["activity", "meal", "transport", "sightseeing"]);
@@ -128,6 +140,15 @@ const itineraryItemSchema = z.object({
   category: z.string(),
   googlePlaceUrl: z.string().nullable().optional(),
   sourceFingerprint: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+});
+
+const packingItemSchema = z.object({
+  id: z.number().int().positive(),
+  tripId: z.number().int().positive(),
+  name: z.string().min(1),
+  completed: z.boolean(),
+  category: z.enum(packingCategoryValues),
   createdAt: z.coerce.date(),
 });
 
@@ -248,8 +269,30 @@ export const api = {
         preferredLanguage: z.enum(supportedLanguageValues).optional(),
         homeCurrency: z.string().min(3).max(3).optional(),
         citizenship: z.string().max(120).nullable().optional(),
+        travelWithKids: z.boolean().optional(),
+        travelWithPets: z.boolean().optional(),
+        travelForWork: z.boolean().optional(),
+        needsAccessibility: z.boolean().optional(),
       }),
       responses: { 200: profileSchema, 400: errorSchemas.validation, 401: errorSchemas.unauthorized },
+    },
+  },
+  profilePacking: {
+    list: {
+      method: "GET" as const,
+      path: "/api/profile/packing-items" as const,
+      responses: { 200: z.array(profilePackingItemSchema), 401: errorSchemas.unauthorized },
+    },
+    create: {
+      method: "POST" as const,
+      path: "/api/profile/packing-items" as const,
+      input: z.object({ item: z.string().min(1).max(120) }),
+      responses: { 201: profilePackingItemSchema, 400: errorSchemas.validation, 401: errorSchemas.unauthorized },
+    },
+    delete: {
+      method: "DELETE" as const,
+      path: "/api/profile/packing-items/:id" as const,
+      responses: { 204: z.void(), 401: errorSchemas.unauthorized, 404: errorSchemas.notFound },
     },
   },
   account: {
@@ -352,6 +395,37 @@ export const api = {
     },
     delete: { method: 'DELETE' as const, path: '/api/trips/:id' as const, responses: { 204: z.void(), 404: errorSchemas.notFound } },
   },
+  packing: {
+    listByTrip: {
+      method: "GET" as const,
+      path: "/api/trips/:tripId/packing" as const,
+      responses: { 200: z.array(packingItemSchema) },
+    },
+    create: {
+      method: "POST" as const,
+      path: "/api/trips/:tripId/packing" as const,
+      input: z.object({
+        name: z.string().min(1).max(160),
+        category: z.enum(packingCategoryValues),
+      }),
+      responses: { 201: packingItemSchema, 400: errorSchemas.validation },
+    },
+    update: {
+      method: "PUT" as const,
+      path: "/api/packing/:id" as const,
+      input: z.object({
+        name: z.string().min(1).max(160).optional(),
+        completed: z.boolean().optional(),
+        category: z.enum(packingCategoryValues).optional(),
+      }),
+      responses: { 200: packingItemSchema, 400: errorSchemas.validation, 404: errorSchemas.notFound },
+    },
+    delete: {
+      method: "DELETE" as const,
+      path: "/api/packing/:id" as const,
+      responses: { 204: z.void(), 404: errorSchemas.notFound },
+    },
+  },
   packingLists: {
     listByTrip: { method: 'GET' as const, path: '/api/trips/:tripId/packing-lists' as const, responses: { 200: z.array(z.custom<typeof packingLists.$inferSelect>()) } },
     create: { method: 'POST' as const, path: '/api/trips/:tripId/packing-lists' as const, input: insertPackingListSchema.omit({ tripId: true }), responses: { 201: z.custom<typeof packingLists.$inferSelect>(), 400: errorSchemas.validation } },
@@ -373,6 +447,7 @@ export const api = {
   itineraryItems: {
     listByTrip: { method: 'GET' as const, path: '/api/trips/:tripId/itinerary' as const, responses: { 200: z.array(itineraryItemSchema) } },
     create: { method: 'POST' as const, path: '/api/trips/:tripId/itinerary' as const, input: insertItineraryItemSchema.omit({ tripId: true }), responses: { 201: itineraryItemSchema, 400: errorSchemas.validation } },
+    clearByTrip: { method: 'DELETE' as const, path: '/api/trips/:tripId/itinerary' as const, responses: { 204: z.void(), 404: errorSchemas.notFound } },
     update: { method: 'PUT' as const, path: '/api/itinerary/:id' as const, input: insertItineraryItemSchema.partial(), responses: { 200: itineraryItemSchema, 400: errorSchemas.validation } },
     delete: { method: 'DELETE' as const, path: '/api/itinerary/:id' as const, responses: { 204: z.void() } },
   },

@@ -1,13 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" fill="#E05555"/>
+  <rect width="512" height="512" rx="96" fill="#FFF9F5"/>
   <defs>
-    <linearGradient id="ag" x1="0.5" y1="0" x2="0.5" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF"/>
-      <stop offset="100%" stop-color="#F0A830"/>
+    <linearGradient id="annai-g-left-mask" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4E6041"/>
+      <stop offset="60%" stop-color="#2F472C"/>
+      <stop offset="100%" stop-color="#1F3323"/>
+    </linearGradient>
+    <linearGradient id="annai-g-right-mask" x1="0.4" y1="0" x2="0.7" y2="1">
+      <stop offset="0%" stop-color="#B21F2D"/>
+      <stop offset="45%" stop-color="#BC5A3A"/>
+      <stop offset="100%" stop-color="#C3A45B"/>
     </linearGradient>
   </defs>
-  <text x="256" y="148" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="120" font-weight="800" fill="#FFFFFF">A</text>
-  <line x1="256" y1="160" x2="256" y2="216" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round"/>
-  <polygon points="256,216 112,456 256,376" fill="#FFFFFF"/>
-  <polygon points="256,216 400,456 256,376" fill="none" stroke="url(#ag)" stroke-width="14" stroke-linejoin="round"/>
+
+  <text
+    x="256"
+    y="120"
+    text-anchor="middle"
+    font-family="'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif"
+    font-size="126"
+    font-weight="900"
+    fill="#3F5036"
+  >A</text>
+
+  <polygon points="256,168 92,450 256,372" fill="url(#annai-g-left-mask)"/>
+  <polygon points="92,450 256,372 256,392 102,458" fill="#1A2A1E"/>
+
+  <path d="M256 168 L420 450 L256 372 Z" fill="none" stroke="url(#annai-g-right-mask)" stroke-width="20" stroke-linejoin="round" stroke-linecap="round"/>
+  <line x1="256" y1="168" x2="256" y2="372" stroke="url(#annai-g-right-mask)" stroke-width="20" stroke-linecap="round"/>
 </svg>

@@ -3,6 +3,7 @@ import {
   users,
   trips,
   packingLists,
+  profilePackingItems,
   budgetItems,
   travelDocuments,
   itineraryItems,
@@ -23,6 +24,8 @@ import {
   type UpdatePackingListRequest,
   type PackingListResponse,
   type PackingListsResponse,
+  type ProfilePackingItem,
+  type InsertProfilePackingItem,
   type InsertBudgetItem,
   type BudgetItemResponse,
   type BudgetItemsResponse,
@@ -112,6 +115,9 @@ export interface IStorage {
   createPackingList(item: CreatePackingListRequest & { tripId: number }): Promise<PackingListResponse>;
   updatePackingList(id: number, updates: UpdatePackingListRequest): Promise<PackingListResponse>;
   deletePackingList(id: number): Promise<void>;
+  getProfilePackingItemsByUser(userId: number): Promise<ProfilePackingItem[]>;
+  createProfilePackingItem(item: InsertProfilePackingItem): Promise<ProfilePackingItem>;
+  deleteProfilePackingItem(id: number): Promise<void>;
 
   getBudgetItemsByTrip(tripId: number): Promise<BudgetItemsResponse>;
   getBudgetItem(id: number): Promise<BudgetItemResponse | undefined>;
@@ -459,6 +465,19 @@ export class DatabaseStorage implements IStorage {
     await this.orm.delete(packingLists).where(eq(packingLists.id, id));
   }
 
+  async getProfilePackingItemsByUser(userId: number): Promise<ProfilePackingItem[]> {
+    return this.orm.select().from(profilePackingItems).where(eq(profilePackingItems.userId, userId));
+  }
+
+  async createProfilePackingItem(item: InsertProfilePackingItem): Promise<ProfilePackingItem> {
+    const [created] = await this.orm.insert(profilePackingItems).values(item).returning();
+    return created;
+  }
+
+  async deleteProfilePackingItem(id: number): Promise<void> {
+    await this.orm.delete(profilePackingItems).where(eq(profilePackingItems.id, id));
+  }
+
   async getBudgetItemsByTrip(tripId: number): Promise<BudgetItemsResponse> {
     return this.orm.select().from(budgetItems).where(eq(budgetItems.tripId, tripId));
   }
@@ -543,6 +562,7 @@ export class MemStorage implements IStorage {
   private webhookEventsData: SubscriptionWebhookEvent[] = [];
   private tripsData: TripResponse[] = [];
   private packingData: PackingListResponse[] = [];
+  private profilePackingData: ProfilePackingItem[] = [];
   private budgetData: BudgetItemResponse[] = [];
   private docsData: TravelDocumentResponse[] = [];
   private itineraryData: ItineraryItemResponse[] = [];
@@ -553,6 +573,7 @@ export class MemStorage implements IStorage {
   private userId = 1;
   private tripId = 1;
   private packingId = 1;
+  private profilePackingId = 1;
   private budgetId = 1;
   private docId = 1;
   private itineraryId = 1;
@@ -593,6 +614,10 @@ export class MemStorage implements IStorage {
       preferredLanguage: user.preferredLanguage ?? "en",
       homeCurrency: user.homeCurrency ?? "USD",
       citizenship: user.citizenship ?? null,
+      travelWithKids: user.travelWithKids ?? false,
+      travelWithPets: user.travelWithPets ?? false,
+      travelForWork: user.travelForWork ?? false,
+      needsAccessibility: user.needsAccessibility ?? false,
       createdAt: new Date(),
     };
     this.usersData.push(created);
@@ -610,6 +635,7 @@ export class MemStorage implements IStorage {
 
   async deleteUser(id: number): Promise<void> {
     this.usersData = this.usersData.filter((user) => user.id !== id);
+    this.profilePackingData = this.profilePackingData.filter((item) => item.userId !== id);
     this.subscriptionsData = this.subscriptionsData.filter((subscription) => subscription.userId !== id);
     this.giftedEntitlementsData = this.giftedEntitlementsData.filter(
       (gift) => gift.userId !== id && gift.grantedByUserId !== id,
@@ -905,6 +931,7 @@ export class MemStorage implements IStorage {
       tripId: item.tripId,
       item: item.item,
       isPacked: item.isPacked ?? false,
+      category: item.category ?? "home",
       createdAt: new Date(),
     };
     this.packingData.push(created);
@@ -922,6 +949,25 @@ export class MemStorage implements IStorage {
 
   async deletePackingList(id: number): Promise<void> {
     this.packingData = this.packingData.filter((p) => p.id !== id);
+  }
+
+  async getProfilePackingItemsByUser(userId: number): Promise<ProfilePackingItem[]> {
+    return this.profilePackingData.filter((item) => item.userId === userId);
+  }
+
+  async createProfilePackingItem(item: InsertProfilePackingItem): Promise<ProfilePackingItem> {
+    const created: ProfilePackingItem = {
+      id: this.profilePackingId++,
+      userId: item.userId,
+      item: item.item,
+      createdAt: new Date(),
+    };
+    this.profilePackingData.push(created);
+    return created;
+  }
+
+  async deleteProfilePackingItem(id: number): Promise<void> {
+    this.profilePackingData = this.profilePackingData.filter((item) => item.id !== id);
   }
 
   async getBudgetItemsByTrip(tripId: number): Promise<BudgetItemsResponse> {

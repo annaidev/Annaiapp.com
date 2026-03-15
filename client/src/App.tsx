@@ -12,9 +12,9 @@ import { useLocation } from "wouter";
 import { I18nProvider } from "@/lib/i18n";
 
 const AccountPage = lazy(() => import("@/pages/AccountPage"));
+const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
 const TravelAuthPage = lazy(() => import("@/pages/TravelAuth"));
 const TripDashboard = lazy(() => import("@/pages/TripDashboard"));
-const PackingList = lazy(() => import("@/pages/PackingList"));
 const BudgetTracker = lazy(() => import("@/pages/BudgetTracker"));
 const DocumentVault = lazy(() => import("@/pages/DocumentVault"));
 const ItineraryBuilder = lazy(() => import("@/pages/ItineraryBuilder"));
@@ -60,10 +60,10 @@ function Router() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/account" component={AccountPage} />
+        <Route path="/profile" component={ProfilePage} />
         <Route path="/pricing" component={PricingPage} />
         <Route path="/travel" component={Home} />
         <Route path="/trips/:id" component={TripDashboard} />
-        <Route path="/trips/:id/packing-list" component={PackingList} />
         <Route path="/trips/:id/budget" component={BudgetTracker} />
         <Route path="/trips/:id/documents" component={DocumentVault} />
         <Route path="/trips/:id/itinerary" component={ItineraryBuilder} />

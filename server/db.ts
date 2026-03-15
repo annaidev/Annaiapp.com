@@ -49,6 +49,10 @@ export async function ensureDatabaseSchema(): Promise<void> {
       preferred_language TEXT NOT NULL DEFAULT 'en',
       home_currency TEXT NOT NULL DEFAULT 'USD',
       citizenship TEXT,
+      travel_with_kids BOOLEAN NOT NULL DEFAULT FALSE,
+      travel_with_pets BOOLEAN NOT NULL DEFAULT FALSE,
+      travel_for_work BOOLEAN NOT NULL DEFAULT FALSE,
+      needs_accessibility BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -63,7 +67,11 @@ export async function ensureDatabaseSchema(): Promise<void> {
     ADD COLUMN IF NOT EXISTS pro_access_updated_at TIMESTAMP,
     ADD COLUMN IF NOT EXISTS preferred_language TEXT NOT NULL DEFAULT 'en',
     ADD COLUMN IF NOT EXISTS home_currency TEXT NOT NULL DEFAULT 'USD',
-    ADD COLUMN IF NOT EXISTS citizenship TEXT;
+    ADD COLUMN IF NOT EXISTS citizenship TEXT,
+    ADD COLUMN IF NOT EXISTS travel_with_kids BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS travel_with_pets BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS travel_for_work BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS needs_accessibility BOOLEAN NOT NULL DEFAULT FALSE;
   `);
 
   await pool.query(`
@@ -154,6 +162,27 @@ export async function ensureDatabaseSchema(): Promise<void> {
       trip_id INTEGER NOT NULL REFERENCES annai_travel_trips(id) ON DELETE CASCADE,
       item TEXT NOT NULL,
       is_packed BOOLEAN DEFAULT FALSE,
+      category TEXT NOT NULL DEFAULT 'home',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    ALTER TABLE annai_travel_packing_lists
+    ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'home';
+  `);
+
+  await pool.query(`
+    UPDATE annai_travel_packing_lists
+    SET category = 'home'
+    WHERE category IS NULL OR category = '';
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS annai_travel_profile_packing_items (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES annai_travel_users(id) ON DELETE CASCADE,
+      item TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
