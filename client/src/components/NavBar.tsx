@@ -1,14 +1,28 @@
 import { Link } from "wouter";
+import { useLocation } from "wouter";
 import { useUser } from "@/hooks/use-auth";
-import { useProStatus } from "@/hooks/use-pro-status";
 import { Button } from "@/components/ui/button";
-import { useI18n } from "@/lib/i18n";
 import { AnnaiLogo } from "@/components/AnnaiLogo";
+import { cn } from "@/lib/utils";
 
 export function NavBar() {
   const { data: user } = useUser();
-  const { data: proStatus } = useProStatus(Boolean(user));
-  const { t } = useI18n();
+  const [location] = useLocation();
+
+  const isHomeActive = location === "/" || location === "/home";
+  const isTravelActive =
+    location === "/travel" ||
+    location.startsWith("/trip/") ||
+    location.startsWith("/trips");
+  const isAccountActive = location === "/account";
+
+  const navItemClass = (isActive: boolean) =>
+    cn(
+      "min-h-11 rounded-xl border-border/70 px-5 text-sm font-semibold shadow-sm",
+      isActive
+        ? "bg-card text-foreground hover:bg-card/90"
+        : "bg-background text-foreground hover:bg-card/80",
+    );
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/70 bg-background/95 backdrop-blur">
@@ -22,33 +36,32 @@ export function NavBar() {
 
         {user && (
           <div className="flex items-center gap-2 sm:gap-3">
-            {!proStatus?.hasProAccess && (
-              <Button
-                asChild
-                size="lg"
-                className="min-h-11 rounded-xl px-5 text-sm font-semibold shadow-sm"
-                data-testid="button-upgrade-nav"
-              >
-                <Link href="/pricing">{t("nav.upgrade")}</Link>
-              </Button>
-            )}
             <Button
               asChild
               variant="outline"
               size="lg"
-              className="min-h-11 rounded-xl border-border/70 bg-card px-5 text-sm font-semibold text-foreground shadow-sm hover:bg-card/80"
-              data-testid="button-account"
+              className={navItemClass(isHomeActive)}
+              data-testid="button-home"
             >
-              <Link href="/account">{t("nav.account")}</Link>
+              <Link href="/">Home</Link>
             </Button>
             <Button
               asChild
               variant="outline"
               size="lg"
-              className="min-h-11 rounded-xl border-border/70 bg-card px-5 text-sm font-semibold text-foreground shadow-sm hover:bg-card/80"
-              data-testid="button-profile"
+              className={navItemClass(isTravelActive)}
+              data-testid="button-annai-travel"
             >
-              <Link href="/profile">Profile</Link>
+              <Link href="/travel">Annai Travel</Link>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              size="lg"
+              className={navItemClass(isAccountActive)}
+              data-testid="button-account"
+            >
+              <Link href="/account">Account</Link>
             </Button>
           </div>
         )}
