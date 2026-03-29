@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUser } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
+import AnnaiHub from "@/pages/AnnaiHub";
 import AuthPage from "@/pages/AuthPage";
 import { useLocation } from "wouter";
 import { I18nProvider } from "@/lib/i18n";
@@ -58,7 +59,8 @@ function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
-        <Route path="/" component={Home} />
+        <Route path="/" component={AnnaiHub} />
+        <Route path="/home" component={AnnaiHub} />
         <Route path="/account" component={AccountPage} />
         <Route path="/profile" component={ProfilePage} />
         <Route path="/pricing" component={PricingPage} />
