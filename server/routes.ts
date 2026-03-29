@@ -928,17 +928,20 @@ export async function registerRoutes(
       return res.status(503).json({ message: "Camping app is not configured for this environment." });
     }
 
+    const nextPath =
+      typeof req.body?.nextPath === "string" && req.body.nextPath.startsWith("/")
+        ? req.body.nextPath
+        : "/";
+
     try {
       const token = await issueCampingHandoffToken(req.user!);
-      const nextPath =
-        typeof req.body?.nextPath === "string" && req.body.nextPath.startsWith("/")
-          ? req.body.nextPath
-          : "/";
       const handoffUrl = `${CAMPING_APP_URL.replace(/\/+$/, "")}/auth/annai?next=${encodeURIComponent(nextPath)}#token=${token}`;
       return res.json({ handoffUrl });
     } catch (error) {
       console.error("Failed to create camping handoff token", error);
-      return res.status(503).json({ message: "Annai SSO is temporarily unavailable." });
+      // Graceful fallback: open Camping directly when SSO signing is unavailable.
+      const fallbackUrl = `${CAMPING_APP_URL.replace(/\/+$/, "")}${nextPath}`;
+      return res.json({ handoffUrl: fallbackUrl, degradedAuth: true });
     }
   });
 
