@@ -10,10 +10,6 @@ export function NavBar() {
   const [location] = useLocation();
 
   const isHomeActive = location === "/" || location === "/home";
-  const isTravelActive =
-    location === "/travel" ||
-    location.startsWith("/trip/") ||
-    location.startsWith("/trips");
   const isAccountActive = location === "/account";
 
   const navItemClass = (isActive: boolean) =>
@@ -44,15 +40,6 @@ export function NavBar() {
               data-testid="button-home"
             >
               <Link href="/">Home</Link>
-            </Button>
-            <Button
-              asChild
-              variant="outline"
-              size="lg"
-              className={navItemClass(isTravelActive)}
-              data-testid="button-annai-travel"
-            >
-              <Link href="/travel">Annai Travel</Link>
             </Button>
             <Button
               asChild

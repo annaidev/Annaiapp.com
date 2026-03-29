@@ -80,7 +80,9 @@ const DEFAULT_ANNAI_PRO_PRODUCT_ID = ANNAI_PRO_PLANS.find(
 )!.productId;
 const CAMPING_APP_URL = (
   process.env.ANNAI_CAMPING_URL ??
-  (process.env.NODE_ENV === "production" ? "" : "http://127.0.0.1:5001")
+  (process.env.NODE_ENV === "production"
+    ? "https://camping.annaiapp.com"
+    : "http://127.0.0.1:5001")
 ).trim();
 const SSO_TOKEN_TTL_SECONDS = 60;
 const isProduction = process.env.NODE_ENV === "production";
@@ -912,6 +914,16 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   app.post("/api/ecosystem/handoff/camping", requireAuth, async (req, res) => {
+    const entitlements = await getEntitlements(storage, req.user!);
+    if (!requireFeature(res, entitlements, "camping_access")) return;
+
+    const campingModule = getModulesConfig(entitlements.hasProAccess).find(
+      (module) => module.slug === "camping",
+    );
+    if (!campingModule?.enabled) {
+      return res.status(503).json({ message: "Camping is not available in this environment." });
+    }
+
     if (!CAMPING_APP_URL) {
       return res.status(503).json({ message: "Camping app is not configured for this environment." });
     }

@@ -69,7 +69,14 @@ export function isSubscriptionActive(status: string | null | undefined, expiresA
 }
 
 export function getModulesConfig(hasProAccess: boolean): ModuleContract[] {
-  const campingEnabled = parseBooleanEnv(process.env.ANNAI_ENABLE_CAMPING);
+  const defaultCampingUrl =
+    process.env.NODE_ENV === "production"
+      ? "https://camping.annaiapp.com"
+      : "http://127.0.0.1:5001";
+  const configuredCampingUrl = (process.env.ANNAI_CAMPING_URL ?? defaultCampingUrl).trim();
+  const campingEnabled =
+    parseBooleanEnv(process.env.ANNAI_ENABLE_CAMPING) ||
+    Boolean(configuredCampingUrl);
   const cruisesEnabled = parseBooleanEnv(process.env.ANNAI_ENABLE_CRUISES);
 
   return [
